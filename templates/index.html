@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Transcription - STT Web App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 0.95rem;
+        }
+        input[type="file"],
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+            background: #fafafa;
+        }
+        input[type="file"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+        }
+        input[type="file"] {
+            cursor: pointer;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .result-section {
+            margin-top: 30px;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .result-section.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .result-header h3 {
+            color: #333;
+            font-size: 1.2rem;
+        }
+        .language-badge {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+        .transcription-text {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            min-height: 150px;
+            white-space: pre-wrap;
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #333;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        .transcription-text.error {
+            background: #fff5f5;
+            border-color: #feb2b2;
+            color: #c53030;
+        }
+        .loading {
+            text-align: center;
+            padding: 30px;
+            color: #667eea;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e0e0e0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .copy-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+        .copy-btn:hover {
+            background: #5a6fd6;
+        }
+        .copy-btn.copied {
+            background: #10b981;
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #e0e0e0;
+        }
+        .file-info .name {
+            font-weight: 500;
+            color: #333;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .file-info .size {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+        }
+        .format-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .format-item {
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.85rem;
+            color: #666;
+        }
+        .format-item strong {
+            color: #333;
+            display: block;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            margin-top: 15px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+        .tab {
+            padding: 8px 20px;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            color: #666;
+        }
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+        .download-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .download-btn:hover {
+            background: #059669;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ AI Transcription</h1>
+            <p>Convert audio and video files to text using advanced STT models</p>
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('upload')">Upload File</div>
+                <div class="tab" onclick="switchTab('history')">History</div>
+            </div>
+
+            <div id="uploadTab">
+                <div class="form-group">
+                    <label for="file">Select Audio or Video File</label>
+                    <input type="file" id="file" accept=".mp3,.wav,.mp4,.mov,.mkv,.flac,.ogg,.webm,.m4a">
+                </div>
+
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="language">Language (Optional)</label>
+                    <select id="language">
+                        <option value="">Auto-detect</option>
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ru">Russian</option>
+                        <option value="ar">Arabic</option>
+                        <option value="it">Italian</option>
+                        <option value="nl">Dutch</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="model">Model Size</label>
+                    <select id="model">
+                        <option value="tiny">Tiny (Fastest, less accurate)</option>
+                        <option value="base" selected>Base (Good balance)</option>
+                        <option value="small">Small (Better accuracy)</option>
+                        <option value="medium">Medium (High accuracy)</option>
+                        <option value="large">Large (Best accuracy)</option>
+                    </select>
+                </div>
+
+                <button class="btn" id="transcribeBtn" onclick="transcribe()">Transcribe</button>
+
+                <div class="status-bar" id="statusBar" style="display: none;">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Ready</span>
+                </div>
+
+                <div class="result-section" id="resultSection">
+                    <div class="result-header">
+                        <h3>Transcription Result</h3>
+                        <div style="display: flex; gap: 10px;">
+                            <span class="language-badge" id="languageBadge">--</span>
+                            <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()">Copy</button>
+                            <button class="download-btn" onclick="downloadTranscription()">Download .txt</button>
+                        </div>
+                    </div>
+                    <div class="transcription-text" id="transcriptionText">Transcription will appear here...</div>
+
+                    <div class="stats">
+                        <div class="stat-item">
+                            <span>⏱️ <strong id="duration">--</strong></span>
+                        </div>
+                        <div class="stat-item">
+                            <span>📝 <strong id="wordCount">--</strong> words</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>⏱️ <strong id="timeTaken">--</strong> seconds</span>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button class="btn btn-secondary" onclick="resetForm()">New Transcription</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="historyTab" style="display: none;">
+                <div class="form-group">
+                    <label>Recent Transcriptions</label>
+                    <div class="transcription-text" id="historyList" style="min-height: 100px;">
+                        No history yet. Transcriptions will appear here.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 20px;">
+            <h3>Supported Formats</h3>
+            <div class="format-grid">
+                <div class="format-item"><strong>Audio</strong>MP3, WAV, FLAC, OGG, M4A</div>
+                <div class="format-item"><strong>Video</strong>MP4, MOV, MKV, WEBM</div>
+                <div class="format-item"><strong>Max Size</strong>50 MB</div>
+                <div class="format-item"><strong>Device</strong><span id="deviceInfo">CPU</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentResult = null;
+        let transcriptionHistory = [];
+
+        function switchTab(tabName) {
+            const uploadTab = document.getElementById('uploadTab');
+            const historyTab = document.getElementById('historyTab');
+            const tabs = document.querySelectorAll('.tab');
+
+            tabs.forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+
+            if (tabName === 'upload') {
+                uploadTab.style.display = 'block';
+                historyTab.style.display = 'none';
+            } else {
+                uploadTab.style.display = 'none';
+                historyTab.style.display = 'block';
+                loadHistory();
+            }
+        }
+
+        async function transcribe() {
+            const fileInput = document.getElementById('file');
+            const languageInput = document.getElementById('language');
+            const modelInput = document.getElementById('model');
+            const btn = document.getElementById('transcribeBtn');
+            const resultSection = document.getElementById('resultSection');
+            const statusBar = document.getElementById('statusBar');
+            const statusText = document.getElementById('statusText');
+            const statusDot = document.getElementById('statusDot');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+
+            if (!fileInput.files.length) {
+                alert('Please select a file first');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            if (languageInput.value) {
+                formData.append('language', languageInput.value);
+            }
+            if (modelInput.value) {
+                formData.append('model_size', modelInput.value);
+            }
+
+            // Reset UI
+            resultSection.classList.remove('active');
+            btn.disabled = true;
+            btn.textContent = 'Processing...';
+            statusBar.style.display = 'flex';
+            statusText.textContent = 'Uploading file...';
+            statusDot.style.background = '#f59e0b';
+            progressBar.style.display = 'block';
+            progressFill.style.width = '0%';
+
+            try {
+                // Simulate progress
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 15;
+                    if (progress > 90) progress = 90;
+                    progressFill.style.width = progress + '%';
+                }, 300);
+
+                const response = await fetch('/api/v1/transcribe', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Transcription failed');
+                }
+
+                currentResult = data;
+
+                // Update UI with result
+                document.getElementById('transcriptionText').textContent = data.text;
+                document.getElementById('languageBadge').textContent = data.language || 'Auto-detected';
+                document.getElementById('wordCount').textContent = (data.text.trim().split(/\s+/).filter(w => w).length).toLocaleString();
+                document.getElementById('timeTaken').textContent = data.time_taken || '--';
+
+                resultSection.classList.add('active');
+                progressBar.style.display = 'none';
+
+                statusText.textContent = 'Transcription complete!';
+                statusDot.style.background = '#10b981';
+
+                // Add to history
+                addToHistory(data);
+
+            } catch (error) {
+                document.getElementById('transcriptionText').textContent = `Error: ${error.message}`;
+                document.getElementById('transcriptionText').classList.add('error');
+                statusText.textContent = 'Error occurred';
+                statusDot.style.background = '#ef4444';
+                progressBar.style.display = 'none';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Transcribe';
+            }
+        }
+
+        function copyToClipboard() {
+            if (!currentResult) return;
+
+            const text = currentResult.text;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('copyBtn');
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
+        function downloadTranscription() {
+            if (!currentResult) return;
+
+            const text = currentResult.text;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `transcription_${Date.now()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function resetForm() {
+            document.getElementById('file').value = '';
+            document.getElementById('transcriptionText').textContent = 'Transcription will appear here...';
+            document.getElementById('transcriptionText').classList.remove('error');
+            document.getElementById('languageBadge').textContent = '--';
+            document.getElementById('wordCount').textContent = '--';
+            document.getElementById('duration').textContent = '--';
+            document.getElementById('resultSection').classList.remove('active');
+            document.getElementById('statusBar').style.display = 'none';
+            currentResult = null;
+        }
+
+        function addToHistory(data) {
+            const historyItem = {
+                id: data.transcription_id,
+                filename: data.filename,
+                language: data.language,
+                text: data.text,
+                timestamp: new Date().toISOString()
+            };
+
+            transcriptionHistory.unshift(historyItem);
+            if (transcriptionHistory.length > 10) {
+                transcriptionHistory = transcriptionHistory.slice(0, 10);
+            }
+            localStorage.setItem('transcriptionHistory', JSON.stringify(transcriptionHistory));
+        }
+
+        function loadHistory() {
+            const historyList = document.getElementById('historyList');
+            const savedHistory = localStorage.getItem('transcriptionHistory');
+
+            if (!savedHistory) {
+                historyList.textContent = 'No history yet. Transcriptions will appear here.';
+                return;
+            }
+
+            transcriptionHistory = JSON.parse(savedHistory);
+
+            if (transcriptionHistory.length === 0) {
+                historyList.textContent = 'No history yet. Transcriptions will appear here.';
+                return;
+            }
+
+            let html = '<ul style="list-style: none; padding: 0;">';
+            transcriptionHistory.forEach(item => {
+                const excerpt = item.text.substring(0, 100) + (item.text.length > 100 ? '...' : '');
+                html += `
+                    <li style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: background 0.2s;"
+                        onmouseover="this.style.background='#e9ecef'" onmouseout="this.style.background='#f8f9fa'"
+                        onclick="loadFromHistory('${item.id}')">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 500; color: #333;">${item.filename}</span>
+                            <span style="font-size: 0.8rem; color: #666;">${formatDate(item.timestamp)}</span>
+                        </div>
+                        <div style="color: #666; font-size: 0.9rem; margin-top: 5px;">${excerpt}</div>
+                        <div style="margin-top: 5px;">
+                            <span style="background: #667eea; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">${item.language || 'Auto'}</span>
+                        </div>
+                    </li>
+                `;
+            });
+            html += '</ul>';
+
+            historyList.innerHTML = html;
+        }
+
+        function loadFromHistory(id) {
+            fetch(`/api/v1/transcription/${id}`)
+                .then(response => response.json())
+                .then(data => {
+                    currentResult = data;
+                    document.getElementById('transcriptionText').textContent = data.text;
+                    document.getElementById('languageBadge').textContent = data.language || 'Auto-detected';
+                    document.getElementById('wordCount').textContent = (data.text.trim().split(/\s+/).filter(w => w).length).toLocaleString();
+                    document.getElementById('resultSection').classList.add('active');
+                    switchTab('upload');
+                })
+                .catch(err => alert('Failed to load transcription: ' + err.message));
+        }
+
+        function formatDate(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString();
+        }
+
+        // Update device info
+        const deviceInfo = document.getElementById('deviceInfo');
+        if (navigator.gpu) {
+            deviceInfo.textContent = 'GPU (available)';
+        } else {
+            deviceInfo.textContent = 'CPU';
+        }
+
+        // Update file info when file is selected
+        document.getElementById('file').addEventListener('change', function() {
+            if (this.files.length) {
+                const file = this.files[0];
+                const existingInfo = document.querySelector('.file-info');
+                if (existingInfo) existingInfo.remove();
+
+                const fileInfo = document.createElement('div');
+                fileInfo.className = 'file-info';
+                fileInfo.innerHTML = `
+                    <span>📁</span>
+                    <span class="name">${file.name}</span>
+                    <span class="size">${(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                `;
+                this.parentNode.insertBefore(fileInfo, this.nextSibling);
+            }
+        });
+    </script>
+</body>
+</html>

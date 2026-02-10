@@ -1,0 +1,4 @@
+I want to build a web app with fastapi that helps transcribe audio or videos using STT LLM models. Please provide the full code solution for this idea
+
+ollama pull qwen3-coder-next:cloud
+ollama launch claude --model qwen3-coder-next:cloud

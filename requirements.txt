@@ -1,0 +1,20 @@
+# FastAPI and server
+fastapi==0.109.0
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# Audio processing
+pydub==0.25.1
+soundfile==0.12.1
+
+# STT/LLM models
+torch==2.2.0
+transformers==4.37.2
+python-dotenv==1.0.0
+
+# Video processing (for audio extraction)
+moviepy==1.0.3
+
+# Utilities
+numpy==1.26.4
+aiofiles==23.2.1

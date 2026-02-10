@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ide__getDiagnostics",
+      "Bash(dir /b \"C:\\\\Users\\\\PC\\\\Documents\\\\Claude test\")",
+      "Bash(findstr /v \".venv\")",
+      "Bash(findstr /v \"__pycache__\")"
+    ]
+  }
+}
