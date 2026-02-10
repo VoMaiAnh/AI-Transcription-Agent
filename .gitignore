@@ -1,0 +1,23 @@
+# AI/Tooling
+.claude/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python / Caching
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*
+!.env.example
+
+# OS stuff
+.DS_Store
+Thumbs.db
