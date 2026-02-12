@@ -11,6 +11,9 @@ soundfile==0.12.1
 torch==2.2.0
 transformers==4.37.2
 python-dotenv==1.0.0
+qwen-asr
+flash-attn --no-build-isolation
+qwen-tts
 
 # Video processing (for audio extraction)
 moviepy==1.0.3

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Transcription - STT Web App</title>
+    <title>AI Transcription & TTS - Whisper & Qwen3 Models</title>
     <style>
         * {
             margin: 0;
@@ -305,8 +305,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎙️ AI Transcription</h1>
-            <p>Convert audio and video files to text using advanced STT models</p>
+            <h1>🎙️ AI Transcription & TTS</h1>
+            <p>Convert audio/video to text with Whisper & Qwen3-ASR, synthesize speech with Qwen3-TTS</p>
         </div>
 
         <div class="card">
@@ -345,13 +345,27 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="model">Model Size</label>
+                    <label for="model">STT Model</label>
                     <select id="model">
-                        <option value="tiny">Tiny (Fastest, less accurate)</option>
-                        <option value="base" selected>Base (Good balance)</option>
-                        <option value="small">Small (Better accuracy)</option>
-                        <option value="medium">Medium (High accuracy)</option>
-                        <option value="large">Large (Best accuracy)</option>
+                        <optgroup label="Whisper Models">
+                            <option value="whisper-tiny">Tiny (Fastest, less accurate)</option>
+                            <option value="whisper-base" selected>Base (Good balance)</option>
+                            <option value="whisper-small">Small (Better accuracy)</option>
+                            <option value="whisper-medium">Medium (High accuracy)</option>
+                            <option value="whisper-large">Large (Best accuracy)</option>
+                        </optgroup>
+                        <optgroup label="Qwen3-ASR Models (30+ languages, 22 Chinese dialects)">
+                            <option value="qwen3-asr-0.6b">Qwen3-ASR 0.6B (Lightweight)</option>
+                            <option value="qwen3-asr-1.7b">Qwen3-ASR 1.7B (Recommended for Chinese)</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="task">Task (Whisper only)</label>
+                    <select id="task">
+                        <option value="transcribe">Transcribe</option>
+                        <option value="translate">Translate to English</option>
                     </select>
                 </div>
 
@@ -458,7 +472,11 @@
                 formData.append('language', languageInput.value);
             }
             if (modelInput.value) {
-                formData.append('model_size', modelInput.value);
+                formData.append('model', modelInput.value);
+            }
+            const taskInput = document.getElementById('task');
+            if (taskInput.value) {
+                formData.append('task', taskInput.value);
             }
 
             // Reset UI
