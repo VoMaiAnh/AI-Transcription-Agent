@@ -24,11 +24,22 @@ An AI-powered audio/video transcription and text-to-speech application using Whi
 - **Real-time progress** indicators
 - **History management** for transcriptions and TTS results
   
-<p align="center" style="display: flex; flex-direction: row; overflow-x: auto; white-space: nowrap;">
-  <img src="https://github.com/user-attachments/assets/939e94cf-5a22-4fdb-822b-59ae56518074" width="600" alt="Transcription-tab" />
-  <img src="https://github.com/user-attachments/assets/15d54856-d612-4ca8-8a6d-44eee56ff993" width="600" alt="TTS-tab" />
-  <img src="https://github.com/user-attachments/assets/c8ba049a-555f-44ce-ba88-92c15eba9d2e" width="600" alt="History-tab" />
-</p>
+### 🖥️ App Screenshots
+
+<details>
+  <summary>View Transcription Tab</summary>
+  <img src="https://github.com/user-attachments/assets/939e94cf-5a22-4fdb-822b-59ae56518074">
+</details>
+
+<details>
+  <summary>View TTS Tab</summary>
+  <img src="https://github.com/user-attachments/assets/15d54856-d612-4ca8-8a6d-44eee56ff993">
+</details>
+
+<details>
+  <summary>View History Tab</summary>
+  <img src="https://github.com/user-attachments/assets/c8ba049a-555f-44ce-ba88-92c15eba9d2e">
+</details>
 
 ## Project Structure
 
