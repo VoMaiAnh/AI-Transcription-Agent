@@ -2,9 +2,6 @@
 
 An AI-powered audio/video transcription and text-to-speech application using Whisper, Qwen3-ASR, and Qwen3-TTS models. This tool converts audio and video files into accurate text transcriptions and can also synthesize speech from text.
 <img width="1908" height="906" alt="Captura de pantalla 2026-03-03 232938" src="https://github.com/user-attachments/assets/f9f842a5-097c-40cc-95ad-856908daa4c9" />
-<img width="1907" height="909" alt="Captura de pantalla 2026-03-03 233229" src="https://github.com/user-attachments/assets/939e94cf-5a22-4fdb-822b-59ae56518074" />
-<img width="1905" height="899" alt="Captura de pantalla 2026-03-03 232542" src="https://github.com/user-attachments/assets/15d54856-d612-4ca8-8a6d-44eee56ff993" />
-<img width="1904" height="899" alt="Captura de pantalla 2026-03-03 233751" src="https://github.com/user-attachments/assets/c8ba049a-555f-44ce-ba88-92c15eba9d2e" />
 
 ## Features
 
@@ -26,6 +23,12 @@ An AI-powered audio/video transcription and text-to-speech application using Whi
 - **Responsive design** that works on all devices
 - **Real-time progress** indicators
 - **History management** for transcriptions and TTS results
+  
+<p align="center" style="display: flex; flex-direction: row; overflow-x: auto; white-space: nowrap;">
+  <img src="https://github.com/user-attachments/assets/939e94cf-5a22-4fdb-822b-59ae56518074" width="600" alt="Transcription-tab" />
+  <img src="https://github.com/user-attachments/assets/15d54856-d612-4ca8-8a6d-44eee56ff993" width="600" alt="TTS-tab" />
+  <img src="https://github.com/user-attachments/assets/c8ba049a-555f-44ce-ba88-92c15eba9d2e" width="600" alt="History-tab" />
+</p>
 
 ## Project Structure
 
