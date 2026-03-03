@@ -4,8 +4,6 @@
 # Virtual Environments
 .venv/
 venv/
-env/
-ENV/
 
 # Python / Caching
 __pycache__/
@@ -13,11 +11,24 @@ __pycache__/
 *$py.class
 
 # Environment Variables & Secrets
-.env
+*.env
 .env.local
 .env.*
-!.env.example
 
 # OS stuff
 .DS_Store
 Thumbs.db
+
+# Uploads and generated files
+uploads/
+*.wav
+*.mp3
+uploads/*.txt
+uploads/*.srt
+uploads/*.vtt
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
