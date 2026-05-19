@@ -118,13 +118,8 @@ export async function downloadSubtitle(
   transcriptionId: string,
   format: 'srt' | 'vtt' = 'srt'
 ): Promise<{ content: string; filename: string; mediaType: string }> {
-  const formData = new FormData();
-  formData.append('format', format);
-
-  const response = await fetch(`${API_BASE}/subtitle/${transcriptionId}`, {
-    method: 'POST',
-    body: formData,
-  });
+  const params = new URLSearchParams({ format });
+  const response = await fetch(`${API_BASE}/subtitle/${transcriptionId}?${params}`);
 
   if (!response.ok) {
     const error: ApiError = await response.json().catch(() => ({
@@ -142,6 +137,85 @@ export async function downloadSubtitle(
   const mediaType = response.headers.get('Content-Type') || 'text/plain';
 
   return { content, filename, mediaType };
+}
+
+async function readFileDownload(
+  response: Response,
+  defaultFilename: string
+): Promise<{ blob: Blob; filename: string; mediaType: string }> {
+  if (!response.ok) {
+    const error: ApiError = await response.json().catch(() => ({
+      detail: 'File generation failed',
+    }));
+    throw new Error(error.detail);
+  }
+
+  const blob = await response.blob();
+  const contentDisposition = response.headers.get('Content-Disposition');
+  const filename = contentDisposition
+    ? contentDisposition.split('filename=')[1]?.replace(/"/g, '') ||
+      defaultFilename
+    : defaultFilename;
+  const mediaType = response.headers.get('Content-Type') || blob.type;
+
+  return { blob, filename, mediaType };
+}
+
+/**
+ * Generate a video with embedded subtitles
+ */
+export async function embedSubtitleVideo(
+  transcriptionId: string,
+  options?: {
+    mode?: 'soft' | 'hard';
+    format?: 'srt' | 'vtt';
+  }
+): Promise<{ blob: Blob; filename: string; mediaType: string }> {
+  const formData = new FormData();
+  formData.append('mode', options?.mode || 'soft');
+  formData.append('format', options?.format || 'srt');
+
+  const response = await fetch(`${API_BASE}/subtitle/${transcriptionId}/embed`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  const defaultExt = options?.mode === 'hard' ? 'mp4' : 'mkv';
+  return readFileDownload(response, `subtitled-video.${defaultExt}`);
+}
+
+/**
+ * Generate a dubbed video
+ */
+export async function dubVideo(
+  transcriptionId: string,
+  options?: {
+    target_language?: string;
+    tts_model?: string;
+    voice?: string;
+    speed?: number;
+    pitch?: number;
+    original_volume?: number;
+    whisper_model?: string;
+  }
+): Promise<{ blob: Blob; filename: string; mediaType: string }> {
+  const formData = new FormData();
+  if (options?.target_language) {
+    formData.append('target_language', options.target_language);
+  }
+  formData.append('tts_model', options?.tts_model || 'qwen3-tts-1.8b');
+  formData.append('voice', options?.voice || 'default');
+  formData.append('speed', (options?.speed ?? 1.0).toString());
+  formData.append('pitch', (options?.pitch ?? 1.0).toString());
+  formData.append('original_volume', (options?.original_volume ?? 0.15).toString());
+  formData.append('whisper_model', options?.whisper_model || 'whisper-base');
+
+  const response = await fetch(`${API_BASE}/dub/${transcriptionId}`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  return readFileDownload(response, 'dubbed-video.mp4');
 }
 
 /**

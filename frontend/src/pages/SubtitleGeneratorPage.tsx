@@ -1,5 +1,5 @@
 /**
- * Transcription Page
+ * Subtitle Generator Page
  */
 import { useRef, useState } from 'react';
 import * as api from '../api/client';
@@ -20,15 +20,17 @@ const ALLOWED_EXTENSIONS = [
 ];
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-export function TranscriptionPage() {
+export function SubtitleGeneratorPage() {
   const [file, setFile] = useState<File | null>(null);
   const [language, setLanguage] = useState('');
-  const [model, setModel] = useState('whisper-base');
-  const [task, setTask] = useState<'transcribe' | 'translate'>('transcribe');
+  const [model, setModel] = useState('parakeet-tdt-0.6b');
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<TranscriptionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [subtitleFormat, setSubtitleFormat] = useState<'srt' | 'vtt'>('srt');
+  const [preview, setPreview] = useState<string | null>(null);
+  const [mediaLoading, setMediaLoading] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +64,7 @@ export function TranscriptionPage() {
     setError(null);
     setResult(null);
     setProgress(0);
+    setPreview(null);
 
     const progressInterval = setInterval(() => {
       setProgress((prev) => Math.min(prev + Math.random() * 15, 90));
@@ -71,7 +74,6 @@ export function TranscriptionPage() {
       const response = await api.transcribeFile(file, {
         language: language || undefined,
         model: model || undefined,
-        task,
       });
       clearInterval(progressInterval);
       setProgress(100);
@@ -95,17 +97,6 @@ export function TranscriptionPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleCopyToClipboard = () => {
-    if (result?.text) {
-      navigator.clipboard.writeText(result.text);
-    }
-  };
-
-  const handleDownloadTxt = () => {
-    if (!result?.text) return;
-    downloadBlob(new Blob([result.text], { type: 'text/plain' }), `transcription_${Date.now()}.txt`);
-  };
-
   const handleDownloadSubtitle = async (format: 'srt' | 'vtt') => {
     if (!result?.transcription_id) return;
     try {
@@ -119,12 +110,66 @@ export function TranscriptionPage() {
     }
   };
 
+  const handlePreview = async () => {
+    if (!result?.transcription_id) return;
+    try {
+      const { content } = await api.downloadSubtitle(result.transcription_id, subtitleFormat);
+      setPreview(content);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load preview');
+    }
+  };
+
+  const handleCopyToClipboard = () => {
+    if (preview) {
+      navigator.clipboard.writeText(preview);
+    }
+  };
+
+  const handleEmbedVideo = async (mode: 'soft' | 'hard') => {
+    if (!result?.transcription_id) return;
+    setMediaLoading(mode);
+    setError(null);
+
+    try {
+      const { blob, filename } = await api.embedSubtitleVideo(result.transcription_id, {
+        mode,
+        format: subtitleFormat,
+      });
+      downloadBlob(blob, filename);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate subtitled video');
+    } finally {
+      setMediaLoading(null);
+    }
+  };
+
+  const handleDubVideo = async () => {
+    if (!result?.transcription_id) return;
+    setMediaLoading('dub');
+    setError(null);
+
+    try {
+      const { blob, filename } = await api.dubVideo(result.transcription_id, {
+        target_language: result.language === 'en' ? undefined : 'en',
+        original_volume: 0.15,
+      });
+      downloadBlob(blob, filename);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate dubbed video');
+    } finally {
+      setMediaLoading(null);
+    }
+  };
+
   const handleReset = () => {
     setFile(null);
     setLanguage('');
     setResult(null);
     setError(null);
     setProgress(0);
+    setPreview(null);
+    setMediaLoading(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -138,13 +183,14 @@ export function TranscriptionPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const wordCount = result?.text ? result.text.trim().split(/\s+/).filter((w) => w).length : 0;
+  const segmentCount = result?.segments ? result.segments.length : 0;
+  const hasVideoOutput = Boolean(result?.is_video && segmentCount > 0);
 
   return (
     <div className="page">
       <div className="page-header">
-        <h1>Audio/Video Transcription</h1>
-        <p>Convert audio and video files to text using AI-powered speech recognition</p>
+        <h1>Subtitle Generator</h1>
+        <p>Generate SRT/VTT subtitles and video subtitle outputs from timestamped speech recognition</p>
       </div>
 
       <div className="card">
@@ -190,13 +236,11 @@ export function TranscriptionPage() {
                 <option value="es">Spanish</option>
                 <option value="fr">French</option>
                 <option value="de">German</option>
-                <option value="zh">Chinese</option>
-                <option value="ja">Japanese</option>
-                <option value="ko">Korean</option>
+                <option value="it">Italian</option>
                 <option value="pt">Portuguese</option>
                 <option value="ru">Russian</option>
-                <option value="ar">Arabic</option>
-                <option value="it">Italian</option>
+                <option value="uk">Ukrainian</option>
+                <option value="pl">Polish</option>
                 <option value="nl">Dutch</option>
               </select>
             </div>
@@ -209,34 +253,18 @@ export function TranscriptionPage() {
                 onChange={(e) => setModel(e.target.value)}
                 disabled={loading}
               >
-                <optgroup label="Whisper Models">
-                  <option value="whisper-tiny">Tiny (Fastest)</option>
-                  <option value="whisper-base">Base (Balanced)</option>
-                  <option value="whisper-small">Small</option>
-                  <option value="whisper-medium">Medium</option>
-                  <option value="whisper-large">Large (Best)</option>
+                <optgroup label="Parakeet TDT Models">
+                  <option value="parakeet-tdt-0.6b">Parakeet TDT 0.6B v3 (Recommended)</option>
                 </optgroup>
-                <optgroup label="Qwen3-ASR Models">
-                  <option value="qwen3-asr-0.6b">Qwen3-ASR 0.6B</option>
-                  <option value="qwen3-asr-1.7b">Qwen3-ASR 1.7B</option>
-                </optgroup>
-                <optgroup label="Subtitle Models">
-                  <option value="parakeet-tdt-0.6b">Parakeet TDT 0.6B v3</option>
+                <optgroup label="Other Models">
+                  <option value="whisper-base">Whisper Base</option>
+                  <option value="whisper-medium">Whisper Medium</option>
+                  <option value="whisper-large">Whisper Large</option>
                 </optgroup>
               </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="task">Task</label>
-              <select
-                id="task"
-                value={task}
-                onChange={(e) => setTask(e.target.value as 'transcribe' | 'translate')}
-                disabled={loading}
-              >
-                <option value="transcribe">Transcribe</option>
-                <option value="translate">Translate to English</option>
-              </select>
+              <p className="form-hint">
+                Parakeet TDT is optimized for accurate subtitle timestamps.
+              </p>
             </div>
           </div>
 
@@ -244,7 +272,7 @@ export function TranscriptionPage() {
 
           <div className="form-actions">
             <button type="submit" className="btn btn-primary" disabled={loading || !file}>
-              {loading ? 'Processing...' : 'Transcribe'}
+              {loading ? 'Processing...' : 'Generate Subtitles'}
             </button>
             {result && (
               <button type="button" className="btn btn-secondary" onClick={handleReset}>
@@ -257,40 +285,87 @@ export function TranscriptionPage() {
         {result && (
           <div className="result-section">
             <div className="result-header">
-              <h3>Result</h3>
+              <h3>Subtitles Generated</h3>
               <div className="result-meta">
                 <span className="badge">{result.language || 'Auto'}</span>
                 <span className="badge badge-secondary">{result.model_used}</span>
+                <span className="badge badge-info">{segmentCount} segments</span>
               </div>
             </div>
 
-            <div className="result-text">{result.text}</div>
+            <div className="result-text" style={{ maxHeight: '200px', fontSize: '0.9em' }}>
+              {result.text.substring(0, 500)}
+              {result.text.length > 500 && '...'}
+            </div>
 
             <div className="result-stats">
               <div className="stat">
-                <span className="stat-value">{wordCount.toLocaleString()}</span>
-                <span className="stat-label">Words</span>
+                <span className="stat-value">{segmentCount}</span>
+                <span className="stat-label">Segments</span>
               </div>
               <div className="stat">
                 <span className="stat-value">{result.time_taken}s</span>
-                <span className="stat-label">Time</span>
+                <span className="stat-label">Processing Time</span>
               </div>
             </div>
 
-            {result.segments && result.segments.length > 0 && (
-              <div className="result-actions">
-                <button className="btn btn-outline" onClick={handleCopyToClipboard}>
-                  Copy Text
-                </button>
-                <button className="btn btn-outline" onClick={handleDownloadTxt}>
-                  Download TXT
-                </button>
-                <button className="btn btn-outline" onClick={() => handleDownloadSubtitle('srt')}>
-                  Download SRT
-                </button>
-                <button className="btn btn-outline" onClick={() => handleDownloadSubtitle('vtt')}>
-                  Download VTT
-                </button>
+            <div className="result-actions">
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label htmlFor="format">Preview Format</label>
+                <select
+                  id="format"
+                  value={subtitleFormat}
+                  onChange={(e) => setSubtitleFormat(e.target.value as 'srt' | 'vtt')}
+                  disabled={loading}
+                >
+                  <option value="srt">SRT (SubRip - most compatible)</option>
+                  <option value="vtt">VTT (WebVTT - web standard)</option>
+                </select>
+              </div>
+
+              <button className="btn btn-outline" onClick={handlePreview}>
+                Preview {subtitleFormat.toUpperCase()}
+              </button>
+              <button className="btn btn-outline" onClick={handleCopyToClipboard} disabled={!preview}>
+                Copy to Clipboard
+              </button>
+              <button className="btn btn-outline" onClick={() => handleDownloadSubtitle('srt')}>
+                Download SRT
+              </button>
+              <button className="btn btn-outline" onClick={() => handleDownloadSubtitle('vtt')}>
+                Download VTT
+              </button>
+              {hasVideoOutput && (
+                <>
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => handleEmbedVideo('soft')}
+                    disabled={mediaLoading !== null}
+                  >
+                    {mediaLoading === 'soft' ? 'Generating...' : 'Download Soft-Subtitled Video'}
+                  </button>
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => handleEmbedVideo('hard')}
+                    disabled={mediaLoading !== null}
+                  >
+                    {mediaLoading === 'hard' ? 'Generating...' : 'Download Burned-In Video'}
+                  </button>
+                  <button
+                    className="btn btn-outline"
+                    onClick={handleDubVideo}
+                    disabled={mediaLoading !== null}
+                  >
+                    {mediaLoading === 'dub' ? 'Generating...' : 'Download Dubbed Video'}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {preview && (
+              <div className="preview-section">
+                <h4>{subtitleFormat.toUpperCase()} Preview</h4>
+                <pre className="subtitle-preview">{preview}</pre>
               </div>
             )}
           </div>
@@ -299,16 +374,16 @@ export function TranscriptionPage() {
 
       <div className="info-cards">
         <div className="info-card">
-          <h4>Supported Audio</h4>
-          <p>MP3, WAV, FLAC, OGG, M4A, AAC</p>
+          <h4>Precise Timestamps</h4>
+          <p>Parakeet TDT uses transducer architecture for accurate subtitle timing</p>
         </div>
         <div className="info-card">
-          <h4>Supported Video</h4>
-          <p>MP4, MOV, MKV, WEBM, AVI</p>
+          <h4>24+ Languages</h4>
+          <p>English, European languages, Russian, Ukrainian supported</p>
         </div>
         <div className="info-card">
-          <h4>Max File Size</h4>
-          <p>50 MB</p>
+          <h4>Video Outputs</h4>
+          <p>Create SRT/VTT files, embedded subtitle videos, and first-pass dubbed videos</p>
         </div>
       </div>
     </div>

@@ -16,25 +16,26 @@ export function Navbar() {
         </Link>
       </div>
       <div className="navbar-menu">
-        <Link
-          to="/"
-          className={`navbar-item ${isActive('/') ? 'active' : ''}`}
-        >
-          <span className="navbar-icon">🎙️</span>
+        <Link to="/" className={`navbar-item ${isActive('/') ? 'active' : ''}`}>
+          <span className="navbar-icon">STT</span>
           Transcription
         </Link>
         <Link
-          to="/tts"
-          className={`navbar-item ${isActive('/tts') ? 'active' : ''}`}
+          to="/subtitles"
+          className={`navbar-item ${isActive('/subtitles') ? 'active' : ''}`}
         >
-          <span className="navbar-icon">🔊</span>
+          <span className="navbar-icon">SUB</span>
+          Subtitles
+        </Link>
+        <Link to="/tts" className={`navbar-item ${isActive('/tts') ? 'active' : ''}`}>
+          <span className="navbar-icon">TTS</span>
           Text-to-Speech
         </Link>
         <Link
           to="/history"
           className={`navbar-item ${isActive('/history') ? 'active' : ''}`}
         >
-          <span className="navbar-icon">📋</span>
+          <span className="navbar-icon">LOG</span>
           History
         </Link>
       </div>
@@ -50,11 +51,9 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="layout">
       <Navbar />
-      <main className="main-content">
-        {children}
-      </main>
+      <main className="main-content">{children}</main>
       <footer className="footer">
-        <p>Powered by Whisper, Qwen3-ASR, and Qwen3-TTS</p>
+        <p>Powered by Whisper, Qwen3-ASR, Parakeet TDT, and Qwen3-TTS</p>
       </footer>
     </div>
   );

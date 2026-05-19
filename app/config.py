@@ -4,6 +4,7 @@ Application configuration using pydantic-settings
 
 import os
 from pathlib import Path
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +31,7 @@ class Settings(BaseSettings):
     STT_MODEL: str = "base"
     WHISPER_MODEL: str = "base"
     QWEN3_ASR_MODEL: str = "Qwen/Qwen3-ASR-1.7B"
+    PARAKEET_MODEL: str = "nvidia/parakeet-tdt-0.6b-v3"
 
     # TTS Model settings
     TTS_MODEL: str = "qwen3-tts-1.8b"
@@ -47,6 +49,18 @@ class Settings(BaseSettings):
     CORS_ALLOW_METHODS: list[str] = ["*"]
     CORS_ALLOW_HEADERS: list[str] = ["*"]
 
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_debug_flag(cls, value):
+        """Accept common deployment words for DEBUG in addition to booleans."""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production", "false", "0", "no"}:
+                return False
+            if normalized in {"debug", "dev", "development", "true", "1", "yes"}:
+                return True
+        return value
+
     @property
     def upload_dir(self) -> Path:
         """Get upload directory, creating it if it doesn't exist"""
@@ -59,6 +73,27 @@ class Settings(BaseSettings):
         tts_dir = self.upload_dir / "tts"
         tts_dir.mkdir(parents=True, exist_ok=True)
         return tts_dir
+
+    @property
+    def source_media_dir(self) -> Path:
+        """Get directory for retained uploaded source media"""
+        source_dir = self.upload_dir / "sources"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        return source_dir
+
+    @property
+    def subtitle_output_dir(self) -> Path:
+        """Get directory for generated subtitle files"""
+        subtitle_dir = self.upload_dir / "subtitles"
+        subtitle_dir.mkdir(parents=True, exist_ok=True)
+        return subtitle_dir
+
+    @property
+    def media_output_dir(self) -> Path:
+        """Get directory for generated video outputs"""
+        media_dir = self.upload_dir / "media"
+        media_dir.mkdir(parents=True, exist_ok=True)
+        return media_dir
 
 
 # Global settings instance

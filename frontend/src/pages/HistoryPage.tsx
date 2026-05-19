@@ -1,7 +1,7 @@
 /**
  * History Page
  */
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import * as api from '../api/client';
 import { TranscriptionInfo, TTSCacheEntry } from '../types';
 
@@ -59,18 +59,21 @@ export function HistoryPage() {
     }
   };
 
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleDownloadSubtitle = async (transcriptionId: string, format: 'srt' | 'vtt') => {
     try {
-      const { content, filename } = await api.downloadSubtitle(transcriptionId, format);
-      const blob = new Blob([content], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const { content, filename, mediaType } = await api.downloadSubtitle(transcriptionId, format);
+      downloadBlob(new Blob([content], { type: mediaType }), filename);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to download subtitle');
     }
@@ -122,12 +125,10 @@ export function HistoryPage() {
             <p>Loading history...</p>
           </div>
         ) : error ? (
-          <div className="alert alert-error">
-            <span>⚠️</span> {error}
-          </div>
+          <div className="alert alert-error">{error}</div>
         ) : filteredTranscriptions.length + filteredTTS.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📭</div>
+            <div className="empty-icon">No items</div>
             <h3>No history yet</h3>
             <p>
               {filter === 'all'
@@ -156,8 +157,8 @@ export function HistoryPage() {
                   {item.result.text.length > 150 ? '...' : ''}
                 </p>
                 <div className="history-item-meta">
-                  <span>📝 {item.result.text.split(/\s+/).length} words</span>
-                  <span>⏱️ {item.time_taken}s</span>
+                  <span>{item.result.text.split(/\s+/).length} words</span>
+                  <span>{item.time_taken}s</span>
                 </div>
                 <div className="history-item-actions">
                   {item.result.segments && item.result.segments.length > 0 && (
@@ -203,8 +204,8 @@ export function HistoryPage() {
                   {item.text.length > 150 ? '...' : ''}
                 </p>
                 <div className="history-item-meta">
-                  <span>🎵 Speed: {item.speed}x</span>
-                  <span>🎤 Pitch: {item.pitch}</span>
+                  <span>Speed: {item.speed}x</span>
+                  <span>Pitch: {item.pitch}</span>
                 </div>
                 <div className="history-item-actions">
                   <button

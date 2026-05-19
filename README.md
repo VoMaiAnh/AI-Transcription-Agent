@@ -127,9 +127,9 @@ pip install --upgrade pip setuptools wheel
 
 > This prevents `ModuleNotFoundError: No module named 'pkg_resources'` errors during installation.
 
-### 4. Install OpenAI Whisper
+### 4. Optional: Install OpenAI Whisper Directly
 
-Install Whisper directly from GitHub for best compatibility:
+`requirements.txt` installs `openai-whisper`. If your platform needs the GitHub build, install it directly:
 
 ```bash
 pip install git+https://github.com/openai/whisper.git
@@ -280,9 +280,28 @@ curl -X POST http://localhost:8000/api/v1/tts/synthesize \
 #### Download Subtitle
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/subtitle/{transcription_id} \
-  -F "format=srt" \
+curl "http://localhost:8000/api/v1/subtitle/{transcription_id}?format=srt" \
   -o subtitle.srt
+```
+
+#### Create Subtitled Video
+
+```bash
+curl -X POST http://localhost:8000/api/v1/subtitle/{transcription_id}/embed \
+  -F "mode=soft" \
+  -F "format=srt" \
+  -o subtitled-video.mkv
+```
+
+Use `mode=hard` to burn subtitles into an MP4.
+
+#### Create Dubbed Video
+
+```bash
+curl -X POST http://localhost:8000/api/v1/dub/{transcription_id} \
+  -F "target_language=en" \
+  -F "voice=default" \
+  -o dubbed-video.mp4
 ```
 
 ## API Endpoints
@@ -296,7 +315,10 @@ curl -X POST http://localhost:8000/api/v1/subtitle/{transcription_id} \
 | GET | `/api/v1/transcription/{id}` | Get transcription by ID |
 | DELETE | `/api/v1/transcription/{id}` | Delete transcription |
 | GET | `/api/v1/list` | List all transcriptions |
-| POST | `/api/v1/subtitle/{id}` | Download subtitle (SRT/VTT) |
+| GET | `/api/v1/subtitle/{id}?format=srt` | Download subtitle (SRT/VTT) |
+| POST | `/api/v1/subtitle/{id}` | Backward-compatible subtitle download |
+| POST | `/api/v1/subtitle/{id}/embed` | Create soft or hard subtitled video |
+| POST | `/api/v1/dub/{id}` | Create first-pass dubbed video |
 
 ### Text-to-Speech
 

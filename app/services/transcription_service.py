@@ -18,6 +18,7 @@ from app.models.transcription import (
     TranscriptionSegment,
     STTModelInfo,
 )
+from app.utils.file_utils import sanitize_filename
 
 
 # STT Models configuration
@@ -59,6 +60,12 @@ STT_MODELS = {
         "name": "Qwen3-ASR-1.7B",
         "description": "Standard ASR, 30+ languages + 22 Chinese dialects"
     },
+    # Parakeet TDT models (CPU-optimized)
+    "parakeet-tdt-0.6b": {
+        "type": "parakeet",
+        "name": "Parakeet TDT 0.6B v3",
+        "description": "NVIDIA Parakeet, 24+ languages, precise timestamps, CPU-friendly"
+    },
 }
 
 # Device detection
@@ -67,9 +74,15 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # Model caches
 MODEL_CACHE = {}
 QWEN3_ASR_CACHE = {}
+PARAKEET_MODEL_CACHE = {}
 
 # In-memory storage for transcription results
 transcription_cache = {}
+
+ALLOWED_AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac'}
+ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.mov', '.mkv', '.webm', '.avi'}
+ALLOWED_EXTENSIONS = ALLOWED_AUDIO_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def safe_remove_file(file_path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
@@ -178,6 +191,52 @@ def load_qwen3_asr_model(model_name: Optional[str] = None):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to load Qwen3-ASR model: {str(e)}"
+        )
+
+
+def load_parakeet_model(model_name: Optional[str] = None):
+    """
+    Load Parakeet TDT model with caching.
+    CPU-optimized using ONNX Runtime.
+
+    Args:
+        model_name: Name of the Parakeet model to load
+
+    Returns:
+        Loaded Parakeet model/pipeline
+
+    Raises:
+        HTTPException: If model loading fails
+    """
+    from fastapi import HTTPException
+
+    model_name = model_name or "nvidia/parakeet-tdt-0.6b-v3"
+
+    # Normalize model name
+    if model_name in ["parakeet-tdt-0.6b", "parakeet-tdt-0.6b-v3"]:
+        model_name = "nvidia/parakeet-tdt-0.6b-v3"
+
+    cache_key = model_name
+
+    if cache_key in PARAKEET_MODEL_CACHE:
+        return PARAKEET_MODEL_CACHE[cache_key]
+
+    try:
+        from app.services.parakeet_service import load_parakeet_model as load_model
+
+        model = load_model(model_name)
+        PARAKEET_MODEL_CACHE[cache_key] = model
+        return model
+
+    except ImportError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Parakeet model not installed. Install with: pip install optimum[onnxruntime] transformers torch soundfile scipy"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load Parakeet model: {str(e)}"
         )
 
 
@@ -310,6 +369,34 @@ def transcribe_with_qwen3_asr(
         )
 
 
+def transcribe_with_parakeet(
+    file_path: str,
+    language: Optional[str] = None,
+    model_name: Optional[str] = None
+) -> TranscriptionResult:
+    """
+    Transcribe audio file using Parakeet TDT model.
+    CPU-optimized with chunked inference for long audio.
+
+    Args:
+        file_path: Path to audio file
+        language: Language code for transcription
+        model_name: Parakeet model name
+
+    Returns:
+        TranscriptionResult with text, language, and segments
+    """
+    from app.services.parakeet_service import transcribe_with_parakeet as transcribe
+
+    return transcribe(
+        audio_path=file_path,
+        language=language,
+        model_name=model_name,
+        chunk_length=30.0,  # 30 second chunks
+        return_timestamps=True
+    )
+
+
 def get_model_type(model: str) -> str:
     """
     Determine model type from model name
@@ -318,7 +405,7 @@ def get_model_type(model: str) -> str:
         model: Model name
 
     Returns:
-        Model type ('whisper' or 'qwen3-asr')
+        Model type ('whisper', 'qwen3-asr', or 'parakeet')
     """
     if model in STT_MODELS:
         return STT_MODELS[model]["type"]
@@ -326,6 +413,8 @@ def get_model_type(model: str) -> str:
         return "whisper"
     if "qwen3" in model.lower() or "qwen" in model.lower():
         return "qwen3-asr"
+    if "parakeet" in model.lower():
+        return "parakeet"
     return "whisper"
 
 
@@ -340,6 +429,52 @@ def get_available_models() -> list[STTModelInfo]:
         )
         for model_id, config in STT_MODELS.items()
     ]
+
+
+def format_supported_extensions() -> str:
+    """Return supported extensions as a stable, readable string."""
+    return ", ".join(sorted(ALLOWED_EXTENSIONS))
+
+
+async def save_upload_file(file, destination: Path) -> int:
+    """
+    Stream an uploaded file to disk while enforcing the configured size limit.
+
+    Args:
+        file: UploadFile to save
+        destination: Final destination path
+
+    Returns:
+        Number of bytes written
+    """
+    from fastapi import HTTPException
+
+    total_size = 0
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(destination, "wb") as output:
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+
+            total_size += len(chunk)
+            if total_size > settings.MAX_FILE_SIZE:
+                output.close()
+                safe_remove_file(str(destination))
+                max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size is {max_mb:.0f} MB."
+                )
+
+            output.write(chunk)
+
+    if total_size == 0:
+        safe_remove_file(str(destination))
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    return total_size
 
 
 def extract_audio_from_video(video_path: str) -> str:
@@ -398,21 +533,24 @@ async def process_transcription(
     from fastapi import HTTPException
 
     # Validate file type
-    allowed_extensions = {
-        '.mp3', '.wav', '.mp4', '.mov',
-        '.mkv', '.flac', '.ogg', '.webm', '.m4a'
-    }
-    file_extension = Path(file.filename).suffix.lower()
+    safe_filename = sanitize_filename(getattr(file, "filename", None))
+    file_extension = Path(safe_filename).suffix.lower()
 
-    if file_extension not in allowed_extensions:
+    if file_extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file format. Supported formats: {', '.join(allowed_extensions)}"
+            detail=f"Invalid file format. Supported formats: {format_supported_extensions()}"
         )
 
     # Determine model and model type
     model = model or f"whisper-{settings.WHISPER_MODEL}"
     model_type = get_model_type(model)
+
+    if task not in {"transcribe", "translate"}:
+        raise HTTPException(status_code=400, detail="Task must be 'transcribe' or 'translate'")
+
+    if task == "translate" and model_type != "whisper":
+        raise HTTPException(status_code=400, detail="Translate task is only supported by Whisper models")
 
     # Validate model
     if model not in STT_MODELS and model_type == "whisper":
@@ -425,19 +563,16 @@ async def process_transcription(
     transcription_id = str(uuid.uuid4())
 
     # Save uploaded file
-    file_path = settings.upload_dir / f"{transcription_id}_{file.filename}"
+    file_path = settings.source_media_dir / f"{transcription_id}_{safe_filename}"
     files_to_cleanup = []
+    saved_size = 0
 
     try:
-        # Save the file
-        content = await file.read()
-        with open(file_path, "wb") as f:
-            f.write(content)
-        files_to_cleanup.append(str(file_path))
+        # Save the original source for later subtitle embedding/dubbing workflows.
+        saved_size = await save_upload_file(file, file_path)
 
         # Determine if it's a video file
-        video_extensions = {'.mp4', '.mov', '.mkv', '.webm'}
-        is_video = file_extension in video_extensions
+        is_video = file_extension in ALLOWED_VIDEO_EXTENSIONS
 
         # Extract audio if video file
         if is_video:
@@ -446,10 +581,12 @@ async def process_transcription(
         else:
             audio_path = str(file_path)
 
-        # Convert to WAV format for processing (16kHz mono)
-        if file_extension not in {'.wav'}:
+        # Convert source audio to WAV format for processing (16kHz mono).
+        # Video extraction already writes a WAV audio track.
+        if not is_video and file_extension != '.wav':
             wav_path = convert_to_wav(audio_path)
-            files_to_cleanup.append(wav_path)
+            if wav_path != audio_path:
+                files_to_cleanup.append(wav_path)
             audio_path = wav_path
 
         # Perform transcription
@@ -457,6 +594,12 @@ async def process_transcription(
 
         if model_type == "qwen3-asr":
             result = transcribe_with_qwen3_asr(
+                audio_path,
+                language=language,
+                model_name=model
+            )
+        elif model_type == "parakeet":
+            result = transcribe_with_parakeet(
                 audio_path,
                 language=language,
                 model_name=model
@@ -475,7 +618,7 @@ async def process_transcription(
         # Store result in cache
         transcription_data = {
             "id": transcription_id,
-            "filename": file.filename,
+            "filename": safe_filename,
             "result": {
                 "text": result.text,
                 "language": result.language,
@@ -487,6 +630,10 @@ async def process_transcription(
             },
             "created_at": datetime.now().isoformat(),
             "is_video": is_video,
+            "source_path": str(file_path),
+            "source_size": saved_size,
+            "subtitle_paths": {},
+            "media_paths": {},
             "model_used": model,
             "model_type": model_type,
             "time_taken": round(time_taken, 2)
@@ -496,11 +643,15 @@ async def process_transcription(
         return transcription_id, transcription_data, files_to_cleanup
 
     except HTTPException:
+        for f in files_to_cleanup:
+            safe_remove_file(f)
+        safe_remove_file(str(file_path))
         raise
     except Exception as e:
         # Clean up on error
         for f in files_to_cleanup:
             safe_remove_file(f)
+        safe_remove_file(str(file_path))
         raise HTTPException(
             status_code=500,
             detail=f"Error processing file: {str(e)}"

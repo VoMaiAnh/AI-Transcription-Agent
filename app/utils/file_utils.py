@@ -3,6 +3,7 @@ File handling utilities
 """
 
 import os
+import re
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -83,6 +84,30 @@ def get_file_extension(filename: str) -> str:
         Lowercase extension with dot (e.g., '.mp3')
     """
     return Path(filename).suffix.lower()
+
+
+def sanitize_filename(filename: Optional[str], fallback: str = "upload") -> str:
+    """
+    Return a filesystem-safe filename while preserving the final extension.
+
+    Args:
+        filename: User supplied filename
+        fallback: Name to use when filename has no safe stem
+
+    Returns:
+        Sanitized filename with path separators removed
+    """
+    raw_name = Path(filename or fallback).name.strip()
+    if not raw_name:
+        raw_name = fallback
+
+    extension = Path(raw_name).suffix.lower()
+    stem = Path(raw_name).stem if extension else raw_name
+    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._-")
+    if not safe_stem:
+        safe_stem = fallback
+
+    return f"{safe_stem}{extension}"
 
 
 def generate_unique_filename(

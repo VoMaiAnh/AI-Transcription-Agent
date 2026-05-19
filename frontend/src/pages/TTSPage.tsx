@@ -3,7 +3,7 @@
  */
 import { useState, useEffect } from 'react';
 import * as api from '../api/client';
-import { TTSModel, TTSVoice } from '../types';
+import { TTSVoice } from '../types';
 
 export function TTSPage() {
   const [text, setText] = useState('');

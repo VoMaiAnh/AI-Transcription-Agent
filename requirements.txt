@@ -11,11 +11,14 @@ soundfile==0.12.1
 
 # STT/LLM models
 torch>=2.2.0
-transformers>=4.37.2
-whisper>=1.0.0
+transformers>=4.57.6
+openai-whisper>=20231117
 qwen-asr
-flash-attn --no-build-isolation
-qwen-tts
+
+# Parakeet TDT (CPU-friendly ONNX inference)
+optimum[onnxruntime]>=1.20.0
+onnxruntime>=1.17.0
+onnx>=1.15.0
 
 # Video processing (for audio extraction)
 moviepy==1.0.3
@@ -24,3 +27,5 @@ moviepy==1.0.3
 numpy>=1.26.4
 aiofiles>=23.2.1
 scipy>=1.10.0
+pytest>=8.0.0
+httpx>=0.26.0

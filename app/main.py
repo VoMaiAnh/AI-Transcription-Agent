@@ -2,8 +2,10 @@
 FastAPI Application Entry Point
 
 AI Transcription & TTS API
-- STT: Whisper and Qwen3-ASR models for speech-to-text
+- STT: Whisper, Qwen3-ASR, and Parakeet TDT models for speech-to-text
 - TTS: Qwen3-TTS and CosyVoice models for text-to-speech
+
+python -X utf8 -m app.main
 """
 
 from pathlib import Path
@@ -34,7 +36,12 @@ def create_app() -> FastAPI:
 - **Whisper models**: whisper-tiny, whisper-base, whisper-small, whisper-medium, whisper-large
 - **Qwen3-ASR models**: qwen3-asr-0.6b, qwen3-asr-1.7b
   - Supports 30+ languages and 22 Chinese dialects
-  - Better for Chinese and Asian languages
+  - Better for Asian languages
+- **Parakeet TDT models**: parakeet-tdt-0.6b
+  - NVIDIA Parakeet TDT 0.6B v3
+  - 24+ languages (English, European, Russian, Ukrainian)
+  - Precise timestamps ideal for subtitle generation
+  - CPU-optimized with ONNX Runtime
 
 ### Text-to-Speech (TTS)
 - **Qwen3-TTS models**: qwen3-tts-0.6b, qwen3-tts-1.8b, qwen3-tts-4b
@@ -43,6 +50,10 @@ def create_app() -> FastAPI:
 ### Subtitle Generation
 - Generate SRT and VTT subtitle files from transcriptions
 - Download subtitles for your audio/video files
+- Persist generated subtitle files for replay/download
+- Create soft-subtitle MKV outputs or burned-in MP4 outputs with FFmpeg
+- Generate first-pass dubbed videos from timestamp-aligned TTS segments
+- Dedicated Subtitle Generator tab for precise timestamps
         """,
         version=settings.APP_VERSION,
     )
@@ -99,10 +110,12 @@ def create_app() -> FastAPI:
             "stt": {
                 "default_whisper": settings.WHISPER_MODEL,
                 "default_qwen3_asr": settings.QWEN3_ASR_MODEL,
+                "default_parakeet": getattr(settings, 'PARAKEET_MODEL', 'nvidia/parakeet-tdt-0.6b-v3'),
                 "available_models": [
                     "whisper-tiny", "whisper-base", "whisper-small",
                     "whisper-medium", "whisper-large",
-                    "qwen3-asr-0.6b", "qwen3-asr-1.7b"
+                    "qwen3-asr-0.6b", "qwen3-asr-1.7b",
+                    "parakeet-tdt-0.6b"
                 ]
             },
             "tts": {
@@ -131,6 +144,7 @@ def main():
     print(f"STT Models:")
     print(f"  Whisper (default): {settings.WHISPER_MODEL}")
     print(f"  Qwen3-ASR (default): {settings.QWEN3_ASR_MODEL}")
+    print(f"  Parakeet TDT: {getattr(settings, 'PARAKEET_MODEL', 'nvidia/parakeet-tdt-0.6b-v3')}")
     print(f"")
     print(f"TTS Models:")
     print(f"  qwen3-tts-0.6b, qwen3-tts-1.8b, qwen3-tts-4b")

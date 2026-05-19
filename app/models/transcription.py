@@ -19,8 +19,8 @@ class TranscriptionResult(BaseModel):
     """Result from a transcription request"""
     text: str
     language: Optional[str] = None
-    segments: list[TranscriptionSegment] = []
-    model_type: Literal["whisper", "qwen3-asr"] = "whisper"
+    segments: list[TranscriptionSegment] = Field(default_factory=list)
+    model_type: Literal["whisper", "qwen3-asr", "parakeet"] = "whisper"
 
 
 class TranscriptionResponse(BaseModel):
@@ -30,10 +30,11 @@ class TranscriptionResponse(BaseModel):
     filename: str
     language: Optional[str] = None
     text: str
-    segments: list[TranscriptionSegment] = []
+    segments: list[TranscriptionSegment] = Field(default_factory=list)
     time_taken: Optional[float] = None
     model_used: str
-    model_type: Literal["whisper", "qwen3-asr"]
+    model_type: Literal["whisper", "qwen3-asr", "parakeet"]
+    is_video: bool = False
 
 
 class TranscriptionInfo(BaseModel):
@@ -44,7 +45,7 @@ class TranscriptionInfo(BaseModel):
     created_at: str
     is_video: bool
     model_used: str
-    model_type: Literal["whisper", "qwen3-asr"]
+    model_type: Literal["whisper", "qwen3-asr", "parakeet"]
     time_taken: float
 
 
@@ -52,7 +53,7 @@ class STTModelInfo(BaseModel):
     """Information about an STT model"""
     id: str
     name: str
-    type: Literal["whisper", "qwen3-asr"]
+    type: Literal["whisper", "qwen3-asr", "parakeet"]
     description: str
 
 
@@ -62,6 +63,7 @@ class STTModelsResponse(BaseModel):
     default_model: str
     default_whisper: str
     default_qwen3_asr: str
+    default_parakeet: Optional[str] = None
 
 
 class SubtitleFormat(BaseModel):

@@ -2,11 +2,48 @@
 Subtitle generation service for creating SRT and VTT files
 """
 
-import io
-from typing import TYPE_CHECKING
+from pathlib import Path
 
-if TYPE_CHECKING:
-    from app.models.transcription import TranscriptionSegment
+from app.config import settings
+from app.models.transcription import TranscriptionSegment
+from app.utils.file_utils import sanitize_filename
+
+SUPPORTED_SUBTITLE_FORMATS = {"srt", "vtt"}
+
+
+def normalize_subtitle_format(format: str = "srt") -> str:
+    """
+    Validate and normalize a subtitle format string.
+
+    Args:
+        format: Subtitle format
+
+    Returns:
+        Normalized subtitle format
+
+    Raises:
+        ValueError: If format is not supported
+    """
+    format_lower = (format or "srt").lower().strip()
+
+    if format_lower not in SUPPORTED_SUBTITLE_FORMATS:
+        raise ValueError(
+            f"Unsupported subtitle format: {format}. Use 'srt' or 'vtt'."
+        )
+
+    return format_lower
+
+
+def _split_milliseconds(seconds: float) -> tuple[int, int, int, int]:
+    """Split seconds into timestamp parts, rounded to the nearest millisecond."""
+    total_millis = max(0, round(seconds * 1000))
+    millis = total_millis % 1000
+    total_seconds = total_millis // 1000
+    secs = total_seconds % 60
+    total_minutes = total_seconds // 60
+    minutes = total_minutes % 60
+    hours = total_minutes // 60
+    return hours, minutes, secs, millis
 
 
 def format_timestamp_srt(seconds: float) -> str:
@@ -19,10 +56,7 @@ def format_timestamp_srt(seconds: float) -> str:
     Returns:
         Formatted timestamp string
     """
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millis = int((seconds % 1) * 1000)
+    hours, minutes, secs, millis = _split_milliseconds(seconds)
 
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
@@ -37,10 +71,7 @@ def format_timestamp_vtt(seconds: float) -> str:
     Returns:
         Formatted timestamp string
     """
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millis = int((seconds % 1) * 1000)
+    hours, minutes, secs, millis = _split_milliseconds(seconds)
 
     return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
 
@@ -142,14 +173,14 @@ def generate_subtitle(
     Raises:
         ValueError: If format is not supported
     """
-    format_lower = format.lower()
+    format_lower = normalize_subtitle_format(format)
 
     if format_lower == "srt":
         return generate_srt(segments)
-    elif format_lower == "vtt":
+    if format_lower == "vtt":
         return generate_vtt(segments)
-    else:
-        raise ValueError(f"Unsupported subtitle format: {format}. Use 'srt' or 'vtt'.")
+
+    raise ValueError(f"Unsupported subtitle format: {format}. Use 'srt' or 'vtt'.")
 
 
 def get_subtitle_media_type(format: str = "srt") -> str:
@@ -162,14 +193,14 @@ def get_subtitle_media_type(format: str = "srt") -> str:
     Returns:
         MIME type string
     """
-    format_lower = format.lower()
+    format_lower = normalize_subtitle_format(format)
 
     if format_lower == "srt":
         return "application/x-subrip"
-    elif format_lower == "vtt":
+    if format_lower == "vtt":
         return "text/vtt"
-    else:
-        return "text/plain"
+
+    return "text/plain"
 
 
 def get_subtitle_extension(format: str = "srt") -> str:
@@ -182,11 +213,94 @@ def get_subtitle_extension(format: str = "srt") -> str:
     Returns:
         File extension with dot (e.g., '.srt')
     """
-    format_lower = format.lower()
+    format_lower = normalize_subtitle_format(format)
 
     if format_lower == "srt":
         return ".srt"
-    elif format_lower == "vtt":
+    if format_lower == "vtt":
         return ".vtt"
-    else:
-        return ".txt"
+
+    return ".txt"
+
+
+def get_segments_from_transcription(transcription: dict) -> list[TranscriptionSegment]:
+    """
+    Build typed subtitle segments from a cached transcription entry.
+
+    Args:
+        transcription: Cached transcription data
+
+    Returns:
+        List of TranscriptionSegment objects
+    """
+    return [
+        TranscriptionSegment(
+            id=seg["id"],
+            start=seg["start"],
+            end=seg["end"],
+            text=seg["text"],
+        )
+        for seg in transcription["result"].get("segments", [])
+    ]
+
+
+def get_subtitle_output_path(
+    transcription_id: str,
+    transcription: dict,
+    format: str = "srt",
+) -> Path:
+    """
+    Build a stable subtitle output path for a transcription.
+
+    Args:
+        transcription_id: Transcription ID
+        transcription: Cached transcription data
+        format: Subtitle format
+
+    Returns:
+        Output path for the subtitle file
+    """
+    format_lower = normalize_subtitle_format(format)
+    original_filename = transcription.get("filename") or "subtitle"
+    safe_name = sanitize_filename(original_filename)
+    base_name = Path(safe_name).stem or "subtitle"
+    extension = get_subtitle_extension(format_lower)
+    return settings.subtitle_output_dir / f"{transcription_id}_{base_name}{extension}"
+
+
+def write_subtitle_file(
+    transcription_id: str,
+    transcription: dict,
+    format: str = "srt",
+) -> Path:
+    """
+    Generate and persist a subtitle file for a transcription.
+
+    Args:
+        transcription_id: Transcription ID
+        transcription: Cached transcription data
+        format: Subtitle format
+
+    Returns:
+        Path to generated subtitle file
+
+    Raises:
+        ValueError: If no timed segments are available or format is unsupported
+    """
+    format_lower = normalize_subtitle_format(format)
+    segments = get_segments_from_transcription(transcription)
+
+    if not segments:
+        raise ValueError(
+            "No segments available for subtitle generation. "
+            "This model doesn't provide timing information."
+        )
+
+    subtitle_content = generate_subtitle(segments, format_lower)
+    subtitle_path = get_subtitle_output_path(transcription_id, transcription, format_lower)
+    subtitle_path.parent.mkdir(parents=True, exist_ok=True)
+    subtitle_path.write_text(subtitle_content, encoding="utf-8")
+
+    transcription.setdefault("subtitle_paths", {})[format_lower] = str(subtitle_path)
+
+    return subtitle_path
