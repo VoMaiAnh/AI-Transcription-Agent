@@ -216,10 +216,6 @@ export function TranscriptionPage() {
                   <option value="whisper-medium">Medium</option>
                   <option value="whisper-large">Large (Best)</option>
                 </optgroup>
-                <optgroup label="Qwen3-ASR Models">
-                  <option value="qwen3-asr-0.6b">Qwen3-ASR 0.6B</option>
-                  <option value="qwen3-asr-1.7b">Qwen3-ASR 1.7B</option>
-                </optgroup>
                 <optgroup label="Subtitle Models">
                   <option value="parakeet-tdt-0.6b">Parakeet TDT 0.6B v3</option>
                 </optgroup>

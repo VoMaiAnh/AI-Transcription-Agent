@@ -14,6 +14,11 @@ class TTSModelInfo(BaseModel):
     description: str
     sample_rate: int
     languages: list[str]
+    model_family: str = "omnivoice"
+    supports_instructions: bool = False
+    supports_voice_presets: bool = True
+    requires_reference_audio: bool = False
+    features: list[str] = []
 
 
 class TTSModelsResponse(BaseModel):
@@ -27,6 +32,9 @@ class TTSVoiceInfo(BaseModel):
     id: str
     name: str
     language: str
+    model_family: str = "omnivoice"
+    description: str = ""
+    native_language: str = ""
 
 
 class TTSVoicesResponse(BaseModel):
@@ -38,11 +46,12 @@ class TTSVoicesResponse(BaseModel):
 class TTSRequest(BaseModel):
     """Request for TTS synthesis"""
     text: str = Field(..., min_length=1, max_length=5000)
-    model: str = "qwen3-tts-1.8b"
-    voice: str = "default"
+    model: str = "k2-fsa/OmniVoice"
+    voice: str = "voice-design"
     speed: float = Field(1.0, ge=0.5, le=2.0)
     pitch: float = Field(1.0, ge=0.5, le=2.0)
     language: Optional[str] = None
+    instruction: Optional[str] = None
     output_format: Literal["wav", "mp3"] = "wav"
 
 
@@ -67,6 +76,7 @@ class TTSCacheEntry(BaseModel):
     speed: float
     pitch: float
     language: Optional[str]
+    instruction: Optional[str] = None
     duration: float
     sample_rate: int
     created_at: str

@@ -7,11 +7,12 @@ import { TTSVoice } from '../types';
 
 export function TTSPage() {
   const [text, setText] = useState('');
-  const [model, setModel] = useState('qwen3-tts-1.8b');
-  const [voice, setVoice] = useState('default');
+  const [model, setModel] = useState('k2-fsa/OmniVoice');
+  const [voice, setVoice] = useState('Ryan');
   const [speed, setSpeed] = useState(1.0);
   const [pitch, setPitch] = useState(1.0);
   const [language, setLanguage] = useState('');
+  const [instruction, setInstruction] = useState('');
   const [outputFormat, setOutputFormat] = useState<'wav' | 'mp3'>('wav');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function TTSPage() {
         speed,
         pitch,
         language: language || null,
+        instruction,
         output_format: outputFormat,
       });
 
@@ -98,15 +100,8 @@ export function TTSPage() {
                 onChange={(e) => setModel(e.target.value)}
                 disabled={loading}
               >
-                <optgroup label="Qwen3-TTS Models">
-                  <option value="qwen3-tts-0.6b">Qwen3-TTS 0.6B (Fast)</option>
-                  <option value="qwen3-tts-1.8b">Qwen3-TTS 1.8B (Balanced)</option>
-                  <option value="qwen3-tts-4b">Qwen3-TTS 4B (Best)</option>
-                </optgroup>
-                <optgroup label="CosyVoice Models">
-                  <option value="cosyvoice-300m">CosyVoice 300M</option>
-                  <option value="cosyvoice-300m-sft">CosyVoice 300M SFT</option>
-                  <option value="cosyvoice-300m-instruct">CosyVoice 300M Instruct</option>
+                <optgroup label="OmniVoice Models">
+                  <option value="k2-fsa/OmniVoice">OmniVoice</option>
                 </optgroup>
               </select>
             </div>
@@ -136,8 +131,10 @@ export function TTSPage() {
                 disabled={loading}
               >
                 <option value="">Auto-detect</option>
-                <option value="en">English</option>
-                <option value="zh">Chinese</option>
+                <option value="English">English</option>
+                <option value="Chinese">Chinese</option>
+                <option value="Japanese">Japanese</option>
+                <option value="Korean">Korean</option>
               </select>
             </div>
           </div>
@@ -189,6 +186,18 @@ export function TTSPage() {
                 <option value="mp3">MP3 (Compressed)</option>
               </select>
             </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="instruction">Instruction / Voice Design</label>
+            <textarea
+              id="instruction"
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              placeholder="female, young adult, low pitch, british accent"
+              disabled={loading}
+              rows={3}
+            />
           </div>
 
           {error && (

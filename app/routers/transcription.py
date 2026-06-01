@@ -1,6 +1,6 @@
 """
 Transcription Router
-Handles audio/video transcription endpoints using Whisper or Qwen3-ASR models
+Handles audio/video transcription endpoints using Whisper or Parakeet models
 """
 
 from pathlib import Path
@@ -17,6 +17,7 @@ from app.services.transcription_service import (
     process_transcription,
     safe_remove_file,
     get_available_models,
+    persist_transcription_cache,
 )
 from app.services.subtitle_service import (
     get_subtitle_media_type,
@@ -28,6 +29,7 @@ from app.services.media_service import (
     create_subtitled_video,
     get_video_media_type,
 )
+from app.services.tts_service import DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE
 
 
 # Router instance
@@ -62,7 +64,6 @@ async def list_stt_models():
         models=get_available_models(),
         default_model="whisper-base",
         default_whisper=settings.WHISPER_MODEL,
-        default_qwen3_asr=settings.QWEN3_ASR_MODEL,
         default_parakeet=getattr(settings, 'PARAKEET_MODEL', 'nvidia/parakeet-tdt-0.6b-v3')
     )
 
@@ -72,20 +73,16 @@ async def transcribe(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Audio or video file to transcribe"),
     language: Optional[str] = Form(None, description="Language code (e.g., 'en', 'zh', 'es')"),
-    model: Optional[str] = Form(None, description="Model: whisper-tiny/base/small/medium/large, qwen3-asr-0.6b/1.7b, or parakeet-tdt-0.6b"),
+    model: Optional[str] = Form(None, description="Model: whisper-tiny/base/small/medium/large or parakeet-tdt-0.6b"),
     task: str = Form("transcribe", description="Task: transcribe or translate (Whisper only)")
 ):
     """
-    Transcribe an audio or video file using Whisper, Qwen3-ASR, or Parakeet TDT models.
+    Transcribe an audio or video file using Whisper or Parakeet TDT models.
 
     **Supported formats:** MP3, WAV, FLAC, OGG, M4A, AAC, MP4, MOV, MKV, WEBM, AVI
 
     **Whisper models:** whisper-tiny, whisper-base, whisper-small, whisper-medium, whisper-large
     - General purpose, good for most languages
-
-    **Qwen3-ASR models:** qwen3-asr-0.6b, qwen3-asr-1.7b
-    - Supports 30+ languages and 22 Chinese dialects
-    - Best for Asian languages
 
     **Parakeet TDT models:** parakeet-tdt-0.6b
     - NVIDIA Parakeet TDT 0.6B v3
@@ -132,6 +129,7 @@ async def delete_transcription(transcription_id: str):
     transcription = _get_transcription_or_404(transcription_id)
     _remove_transcription_artifacts(transcription)
     del transcription_cache[transcription_id]
+    persist_transcription_cache()
     return {"message": "Transcription deleted", "id": transcription_id}
 
 
@@ -160,6 +158,7 @@ async def get_subtitle(
 
     try:
         subtitle_path = write_subtitle_file(transcription_id, transcription, format)
+        persist_transcription_cache()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -201,6 +200,7 @@ async def embed_subtitle_in_video(
             mode=mode,
             format=format,
         )
+        persist_transcription_cache()
     except FileNotFoundError as exc:
         raise HTTPException(status_code=410, detail=str(exc)) from exc
     except ValueError as exc:
@@ -223,8 +223,8 @@ async def embed_subtitle_in_video(
 async def dub_video(
     transcription_id: str,
     target_language: Optional[str] = Form(None, description="Optional target language. Use 'en' for Whisper translation."),
-    tts_model: str = Form("qwen3-tts-1.8b", description="TTS model to use"),
-    voice: str = Form("default", description="TTS voice to use"),
+    tts_model: str = Form(DEFAULT_TTS_MODEL, description="TTS model to use"),
+    voice: str = Form(DEFAULT_TTS_VOICE, description="Ignored for OmniVoice voice-design mode"),
     speed: float = Form(1.0, description="Speech speed (0.5-2.0)"),
     pitch: float = Form(1.0, description="Pitch adjustment (0.5-2.0)"),
     original_volume: float = Form(0.15, description="Original audio bed volume from 0.0 to 1.0"),
@@ -250,6 +250,7 @@ async def dub_video(
             original_volume=original_volume,
             whisper_model=whisper_model,
         )
+        persist_transcription_cache()
     except TranslationNotConfiguredError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
     except FileNotFoundError as exc:

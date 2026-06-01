@@ -20,7 +20,7 @@ from app.services.subtitle_service import (
     normalize_subtitle_format,
     write_subtitle_file,
 )
-from app.services.tts_service import synthesize_audio
+from app.services.tts_service import DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, synthesize_audio
 from app.utils.file_utils import safe_remove_file
 
 
@@ -246,8 +246,8 @@ def create_dubbed_video(
     transcription_id: str,
     transcription: dict,
     target_language: Optional[str] = None,
-    tts_model: str = "qwen3-tts-1.8b",
-    voice: str = "default",
+    tts_model: str = DEFAULT_TTS_MODEL,
+    voice: str = DEFAULT_TTS_VOICE,
     speed: float = 1.0,
     pitch: float = 1.0,
     original_volume: float = 0.15,

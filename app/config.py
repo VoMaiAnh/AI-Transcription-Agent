@@ -30,11 +30,10 @@ class Settings(BaseSettings):
     # STT Model settings
     STT_MODEL: str = "base"
     WHISPER_MODEL: str = "base"
-    QWEN3_ASR_MODEL: str = "Qwen/Qwen3-ASR-1.7B"
     PARAKEET_MODEL: str = "nvidia/parakeet-tdt-0.6b-v3"
 
     # TTS Model settings
-    TTS_MODEL: str = "qwen3-tts-1.8b"
+    TTS_MODEL: str = "k2-fsa/OmniVoice"
 
     # Device settings
     DEVICE: str = "cpu"  # Will be overridden by torch.cuda.is_available()

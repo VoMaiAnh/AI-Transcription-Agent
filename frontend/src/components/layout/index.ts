@@ -1,1 +1,1 @@
-export { Navbar, Layout } from './Layout';
+export { Layout } from './Layout';

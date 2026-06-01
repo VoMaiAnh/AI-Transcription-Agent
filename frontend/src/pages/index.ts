@@ -1,4 +1,5 @@
-export { TranscriptionPage } from './TranscriptionPage';
-export { TTSPage } from './TTSPage';
-export { HistoryPage } from './HistoryPage';
-export { SubtitleGeneratorPage } from './SubtitleGeneratorPage';
+export { ArchivePage } from './ArchivePage';
+export { DashboardPage } from './DashboardPage';
+export { DubbingStudioPage } from './DubbingStudioPage';
+export { LiveEditorPage } from './LiveEditorPage';
+export { StatusPage } from './StatusPage';

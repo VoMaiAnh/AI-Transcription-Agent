@@ -14,6 +14,8 @@ import {
 } from '../types';
 
 const API_BASE = '/api/v1';
+const DEFAULT_TTS_MODEL = 'k2-fsa/OmniVoice';
+const DEFAULT_TTS_VOICE = 'Ryan';
 
 /**
  * Handle API response and throw error if not ok
@@ -203,8 +205,8 @@ export async function dubVideo(
   if (options?.target_language) {
     formData.append('target_language', options.target_language);
   }
-  formData.append('tts_model', options?.tts_model || 'qwen3-tts-1.8b');
-  formData.append('voice', options?.voice || 'default');
+  formData.append('tts_model', options?.tts_model || DEFAULT_TTS_MODEL);
+  formData.append('voice', options?.voice ?? DEFAULT_TTS_VOICE);
   formData.append('speed', (options?.speed ?? 1.0).toString());
   formData.append('pitch', (options?.pitch ?? 1.0).toString());
   formData.append('original_volume', (options?.original_volume ?? 0.15).toString());
@@ -245,17 +247,21 @@ export async function synthesizeSpeech(
     speed?: number;
     pitch?: number;
     language?: string | null;
+    instruction?: string | null;
     output_format?: 'wav' | 'mp3';
   }
 ): Promise<{ audioBlob: Blob; ttsId: string; duration: number; sampleRate: number }> {
   const formData = new FormData();
   formData.append('text', text);
-  formData.append('model', options?.model || 'qwen3-tts-1.8b');
-  formData.append('voice', options?.voice || 'default');
+  formData.append('model', options?.model || DEFAULT_TTS_MODEL);
+  formData.append('voice', options?.voice ?? DEFAULT_TTS_VOICE);
   formData.append('speed', (options?.speed ?? 1.0).toString());
   formData.append('pitch', (options?.pitch ?? 1.0).toString());
   if (options?.language !== undefined) {
     formData.append('language', options.language || '');
+  }
+  if (options?.instruction !== undefined) {
+    formData.append('instruction', options.instruction || '');
   }
   formData.append('output_format', options?.output_format || 'wav');
 

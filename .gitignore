@@ -34,4 +34,5 @@ frontend/.env
 frontend/.env.local
 
 # Research and improvements 
-/research
+**/research/
+research/

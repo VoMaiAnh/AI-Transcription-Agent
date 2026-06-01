@@ -2,8 +2,8 @@
 FastAPI Application Entry Point
 
 AI Transcription & TTS API
-- STT: Whisper, Qwen3-ASR, and Parakeet TDT models for speech-to-text
-- TTS: Qwen3-TTS and CosyVoice models for text-to-speech
+- STT: Whisper and Parakeet TDT models for speech-to-text
+- TTS: OmniVoice for text-to-speech and voice design
 
 python -X utf8 -m app.main
 """
@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings, get_settings
 from app.routers import transcription, tts
+from app.services.tts_service import get_available_models as get_available_tts_models
 
 
 def create_app() -> FastAPI:
@@ -34,9 +35,6 @@ def create_app() -> FastAPI:
 
 ### Speech-to-Text (STT)
 - **Whisper models**: whisper-tiny, whisper-base, whisper-small, whisper-medium, whisper-large
-- **Qwen3-ASR models**: qwen3-asr-0.6b, qwen3-asr-1.7b
-  - Supports 30+ languages and 22 Chinese dialects
-  - Better for Asian languages
 - **Parakeet TDT models**: parakeet-tdt-0.6b
   - NVIDIA Parakeet TDT 0.6B v3
   - 24+ languages (English, European, Russian, Ukrainian)
@@ -44,8 +42,9 @@ def create_app() -> FastAPI:
   - CPU-optimized with ONNX Runtime
 
 ### Text-to-Speech (TTS)
-- **Qwen3-TTS models**: qwen3-tts-0.6b, qwen3-tts-1.8b, qwen3-tts-4b
-- **CosyVoice models**: cosyvoice-300m, cosyvoice-300m-sft, cosyvoice-300m-instruct
+- **OmniVoice models**: k2-fsa/OmniVoice
+  - 600+ language zero-shot coverage
+  - Voice design with speaker attributes such as gender, age, pitch, accent, dialect, and whisper
 
 ### Subtitle Generation
 - Generate SRT and VTT subtitle files from transcriptions
@@ -109,20 +108,15 @@ def create_app() -> FastAPI:
             },
             "stt": {
                 "default_whisper": settings.WHISPER_MODEL,
-                "default_qwen3_asr": settings.QWEN3_ASR_MODEL,
                 "default_parakeet": getattr(settings, 'PARAKEET_MODEL', 'nvidia/parakeet-tdt-0.6b-v3'),
                 "available_models": [
                     "whisper-tiny", "whisper-base", "whisper-small",
                     "whisper-medium", "whisper-large",
-                    "qwen3-asr-0.6b", "qwen3-asr-1.7b",
                     "parakeet-tdt-0.6b"
                 ]
             },
             "tts": {
-                "available_models": [
-                    "qwen3-tts-0.6b", "qwen3-tts-1.8b", "qwen3-tts-4b",
-                    "cosyvoice-300m", "cosyvoice-300m-sft", "cosyvoice-300m-instruct"
-                ]
+                "available_models": [model.id for model in get_available_tts_models()]
             }
         }
 
@@ -143,12 +137,11 @@ def main():
     print(f"")
     print(f"STT Models:")
     print(f"  Whisper (default): {settings.WHISPER_MODEL}")
-    print(f"  Qwen3-ASR (default): {settings.QWEN3_ASR_MODEL}")
     print(f"  Parakeet TDT: {getattr(settings, 'PARAKEET_MODEL', 'nvidia/parakeet-tdt-0.6b-v3')}")
     print(f"")
     print(f"TTS Models:")
-    print(f"  qwen3-tts-0.6b, qwen3-tts-1.8b, qwen3-tts-4b")
-    print(f"  cosyvoice-300m, cosyvoice-300m-sft, cosyvoice-300m-instruct")
+    for model in get_available_tts_models():
+        print(f"  {model.id}")
     print(f"")
     print(f"Upload directory: {settings.upload_dir}")
     print(f"API available at: http://localhost:{settings.PORT}")
