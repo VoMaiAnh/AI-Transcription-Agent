@@ -4,6 +4,8 @@
 
 import {
   STTModelsResponse,
+  TranslationModelsResponse,
+  TranslationResult,
   TTSModelsResponse,
   TTSVoicesResponse,
   TranscriptionResponse,
@@ -62,6 +64,11 @@ export async function getSTTModels(): Promise<STTModelsResponse> {
   return handleResponse<STTModelsResponse>(response);
 }
 
+export async function getTranslationModels(): Promise<TranslationModelsResponse> {
+  const response = await fetch(`${API_BASE}/translation/models`);
+  return handleResponse<TranslationModelsResponse>(response);
+}
+
 /**
  * Transcribe audio/video file
  */
@@ -115,6 +122,86 @@ export function getTranscriptionMediaUrl(
   return `${API_BASE}/transcription/${transcriptionId}/media/${encodeURIComponent(mediaKey)}`;
 }
 
+export function getTranslationAudioUrl(
+  transcriptionId: string,
+  language: string,
+): string {
+  return `${API_BASE}/transcription/${transcriptionId}/translation/${encodeURIComponent(language)}/audio`;
+}
+
+export async function translateTranscription(
+  transcriptionId: string,
+  options: {
+    source_language?: string | null;
+    target_language: string;
+    model?: string;
+  },
+): Promise<{
+  success: boolean;
+  transcription_id: string;
+  translation: TranslationResult;
+}> {
+  const formData = new FormData();
+  if (options.source_language) {
+    formData.append("source_language", options.source_language);
+  }
+  formData.append("target_language", options.target_language);
+  if (options.model) {
+    formData.append("model", options.model);
+  }
+
+  const response = await fetch(
+    `${API_BASE}/transcription/${transcriptionId}/translate`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  return handleResponse<{
+    success: boolean;
+    transcription_id: string;
+    translation: TranslationResult;
+  }>(response);
+}
+
+export async function generateTranslatedTTS(
+  transcriptionId: string,
+  options: {
+    target_language: string;
+    tts_model?: string;
+    voice?: string;
+    speed?: number;
+    replace_existing?: boolean;
+  },
+): Promise<{
+  success: boolean;
+  transcription_id: string;
+  translation: TranslationResult;
+}> {
+  const formData = new FormData();
+  formData.append("target_language", options.target_language);
+  formData.append("tts_model", options.tts_model || DEFAULT_TTS_MODEL);
+  formData.append("voice", options.voice ?? DEFAULT_TTS_VOICE);
+  formData.append("speed", (options.speed ?? 1.0).toString());
+  formData.append(
+    "replace_existing",
+    String(options.replace_existing ?? false),
+  );
+
+  const response = await fetch(
+    `${API_BASE}/transcription/${transcriptionId}/translate/tts`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  return handleResponse<{
+    success: boolean;
+    transcription_id: string;
+    translation: TranslationResult;
+  }>(response);
+}
+
 /**
  * Delete transcription by ID
  */
@@ -146,8 +233,9 @@ export async function listTranscriptions(): Promise<{
 export async function downloadSubtitle(
   transcriptionId: string,
   format: "srt" | "vtt" = "srt",
+  language: string = "original",
 ): Promise<{ content: string; filename: string; mediaType: string }> {
-  const params = new URLSearchParams({ format });
+  const params = new URLSearchParams({ format, language });
   const response = await fetch(
     `${API_BASE}/subtitle/${transcriptionId}?${params}`,
   );
@@ -200,11 +288,13 @@ export async function embedSubtitleVideo(
   options?: {
     mode?: "soft" | "hard";
     format?: "srt" | "vtt";
+    language?: string;
   },
 ): Promise<{ blob: Blob; filename: string; mediaType: string }> {
   const formData = new FormData();
   formData.append("mode", options?.mode || "soft");
   formData.append("format", options?.format || "srt");
+  formData.append("language", options?.language || "original");
 
   const response = await fetch(
     `${API_BASE}/subtitle/${transcriptionId}/embed`,
@@ -224,6 +314,7 @@ export async function embedSubtitleVideo(
 export async function dubVideo(
   transcriptionId: string,
   options?: {
+    language?: string;
     target_language?: string;
     tts_model?: string;
     voice?: string;
@@ -234,6 +325,9 @@ export async function dubVideo(
   },
 ): Promise<{ blob: Blob; filename: string; mediaType: string }> {
   const formData = new FormData();
+  if (options?.language) {
+    formData.append("language", options.language);
+  }
   if (options?.target_language) {
     formData.append("target_language", options.target_language);
   }
@@ -253,6 +347,52 @@ export async function dubVideo(
   });
 
   return readFileDownload(response, "dubbed-video.mp4");
+}
+
+/**
+ * Generate one final video with both dubbing and subtitles.
+ */
+export async function dubAndSubtitleVideo(
+  transcriptionId: string,
+  options?: {
+    language?: string;
+    subtitle_mode?: "soft" | "hard";
+    subtitle_format?: "srt" | "vtt";
+    target_language?: string;
+    tts_model?: string;
+    voice?: string;
+    speed?: number;
+    pitch?: number;
+    original_volume?: number;
+    whisper_model?: string;
+  },
+): Promise<{ blob: Blob; filename: string; mediaType: string }> {
+  const formData = new FormData();
+  if (options?.language) {
+    formData.append("language", options.language);
+  }
+  formData.append("subtitle_mode", options?.subtitle_mode || "hard");
+  formData.append("subtitle_format", options?.subtitle_format || "srt");
+  if (options?.target_language) {
+    formData.append("target_language", options.target_language);
+  }
+  formData.append("tts_model", options?.tts_model || DEFAULT_TTS_MODEL);
+  formData.append("voice", options?.voice ?? DEFAULT_TTS_VOICE);
+  formData.append("speed", (options?.speed ?? 1.0).toString());
+  formData.append("pitch", (options?.pitch ?? 1.0).toString());
+  formData.append(
+    "original_volume",
+    (options?.original_volume ?? 0.15).toString(),
+  );
+  formData.append("whisper_model", options?.whisper_model || "whisper-base");
+
+  const response = await fetch(`${API_BASE}/dub/${transcriptionId}/subtitle`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const defaultExt = options?.subtitle_mode === "soft" ? "mkv" : "mp4";
+  return readFileDownload(response, `dubbed-subtitled-video.${defaultExt}`);
 }
 
 /**

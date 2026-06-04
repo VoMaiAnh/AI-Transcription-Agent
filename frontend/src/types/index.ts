@@ -17,6 +17,30 @@ export interface STTModelsResponse {
   default_parakeet?: string;
 }
 
+// Translation Models
+export interface TranslationLanguage {
+  code: string;
+  name: string;
+  nllb_code: string;
+  tts_supported: boolean;
+}
+
+export interface TranslationModel {
+  id: string;
+  name: string;
+  description: string;
+  device: string;
+  compute_type: string;
+  languages: TranslationLanguage[];
+}
+
+export interface TranslationModelsResponse {
+  models: TranslationModel[];
+  default_model: string;
+  default_source_language: string;
+  default_target_language: string;
+}
+
 // TTS Models
 export interface TTSModel {
   id: string;
@@ -65,6 +89,21 @@ export interface TranscriptionResult {
   model_type: "whisper" | "parakeet";
 }
 
+export interface TranslationResult {
+  language: string;
+  source_language: string | null;
+  model: string;
+  text: string;
+  segments: TranscriptionSegment[];
+  created_at: string;
+  tts_audio_path?: string | null;
+  tts_voice?: string | null;
+  tts_model?: string | null;
+  tts_speed?: number | null;
+  tts_duration?: number | null;
+  tts_sample_rate?: number | null;
+}
+
 export interface TranscriptionResponse {
   success: boolean;
   transcription_id: string;
@@ -87,6 +126,7 @@ export interface TranscriptionInfo {
   source_size?: number;
   subtitle_paths?: Record<string, string>;
   media_paths?: Record<string, string>;
+  translations?: Record<string, TranslationResult>;
   model_used: string;
   model_type: "whisper" | "parakeet";
   time_taken: number;

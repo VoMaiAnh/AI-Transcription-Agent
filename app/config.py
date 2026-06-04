@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # TTS Model settings
     TTS_MODEL: str = "Supertone/supertonic-3"
 
+    # Translation Model settings
+    TRANSLATION_MODEL: str = "JustFrederik/nllb-200-distilled-600M-ct2-int8"
+
     # Device settings
     DEVICE: str = "cpu"  # Will be overridden by torch.cuda.is_available()
 

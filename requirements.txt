@@ -13,6 +13,10 @@ soundfile==0.12.1
 torch>=2.2.0
 openai-whisper>=20231117
 supertonic
+ctranslate2
+transformers>=4.41,<5
+sentencepiece
+huggingface-hub
 
 # Parakeet TDT (CPU-friendly ONNX inference)
 optimum[onnxruntime]>=1.20.0

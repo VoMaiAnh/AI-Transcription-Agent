@@ -160,3 +160,42 @@ def test_dub_video_contract_uses_mocked_media_pipeline(client, tmp_path, monkeyp
 
     assert response.status_code == 200
     assert response.content == b"dubbed"
+
+
+def test_combined_dub_subtitle_contract_uses_mocked_media_pipeline(
+    client, tmp_path, monkeypatch
+):
+    _cache_transcription(is_video=True)
+    output_path = tmp_path / "combined.mp4"
+    output_path.write_bytes(b"combined")
+
+    def fake_create_dubbed_subtitled_video(transcription_id, transcription, **kwargs):
+        assert transcription_id == "tx1"
+        assert kwargs["language"] == "es"
+        assert kwargs["subtitle_mode"] == "hard"
+        assert kwargs["subtitle_format"] == "srt"
+        assert kwargs["voice"] == "M1"
+        assert kwargs["original_volume"] == 0.0
+        return output_path
+
+    monkeypatch.setattr(
+        transcription_router,
+        "create_dubbed_subtitled_video",
+        fake_create_dubbed_subtitled_video,
+    )
+
+    response = client.post(
+        "/api/v1/dub/tx1/subtitle",
+        data={
+            "language": "es",
+            "subtitle_mode": "hard",
+            "subtitle_format": "srt",
+            "voice": "M1",
+            "original_volume": "0",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"combined"
+    assert response.headers["x-track-language"] == "es"
+    assert response.headers["x-subtitle-mode"] == "hard"

@@ -39,7 +39,7 @@ const SUPERTONIC_VOICES = [
   { id: "F5", name: "Supertonic F5" },
 ];
 
-type RenderAction = "soft" | "hard" | "dub";
+type RenderAction = "soft" | "hard" | "dub" | "combined-soft" | "combined-hard";
 
 function chooseRenderedMediaKey(
   mediaPaths?: Record<string, string>,
@@ -78,7 +78,7 @@ export function DubbingStudioPage() {
   const [error, setError] = useState<string | null>(null);
   const [subtitleFormat, setSubtitleFormat] = useState<"srt" | "vtt">("srt");
   const [preview, setPreview] = useState<string | null>(null);
-  const [targetLanguage, setTargetLanguage] = useState("en");
+  const [trackLanguage, setTrackLanguage] = useState("original");
   const [voice, setVoice] = useState("M1");
   const [ttsModel, setTtsModel] = useState(SUPERTONIC_MODEL.id);
   const [speed, setSpeed] = useState(1);
@@ -87,6 +87,7 @@ export function DubbingStudioPage() {
   const [enableSubtitles, setEnableSubtitles] = useState(true);
   const [enableDubbing, setEnableDubbing] = useState(true);
   const [replaceOriginalAudio, setReplaceOriginalAudio] = useState(false);
+  const [generatingTrackAudio, setGeneratingTrackAudio] = useState(false);
   const blobUrlRef = useRef<string | null>(null);
 
   const clearBlobPreview = () => {
@@ -108,6 +109,7 @@ export function DubbingStudioPage() {
       const item = await api.getTranscription(id);
       setProject(item);
       setSourceUrl(api.getTranscriptionSourceUrl(item.id));
+      setTrackLanguage("original");
 
       const mediaKey = chooseRenderedMediaKey(item.media_paths);
       if (mediaKey) {
@@ -171,10 +173,23 @@ export function DubbingStudioPage() {
     };
   }, [transcriptionId]);
 
-  const segments = project?.result.segments || [];
+  const translations = project?.translations || {};
+  const translationEntries = Object.values(translations);
+  const selectedTranslation =
+    trackLanguage === "original" ? null : translations[trackLanguage] || null;
+  const segments =
+    selectedTranslation?.segments || project?.result.segments || [];
   const canExportVideo = Boolean(project?.is_video && segments.length > 0);
+  const selectedTrackHasAudio =
+    trackLanguage === "original" ||
+    Boolean(selectedTranslation?.tts_audio_path);
   const renderedMediaKeys = Object.keys(project?.media_paths || {});
   const effectiveOriginalVolume = replaceOriginalAudio ? 0 : originalVolume;
+  const trackLabel =
+    trackLanguage === "original"
+      ? "Original"
+      : SUPERTONIC_LANGUAGES.find((item) => item.code === trackLanguage)
+          ?.label || trackLanguage.toUpperCase();
 
   const handlePreview = async () => {
     if (!project) return;
@@ -182,6 +197,7 @@ export function DubbingStudioPage() {
       const { content } = await api.downloadSubtitle(
         project.id,
         subtitleFormat,
+        trackLanguage,
       );
       setPreview(content);
     } catch (err) {
@@ -197,6 +213,7 @@ export function DubbingStudioPage() {
       const { content, filename, mediaType } = await api.downloadSubtitle(
         project.id,
         subtitleFormat,
+        trackLanguage,
       );
       downloadBlob(new Blob([content], { type: mediaType }), filename);
     } catch (err) {
@@ -226,6 +243,7 @@ export function DubbingStudioPage() {
       const { blob, filename } = await api.embedSubtitleVideo(project.id, {
         mode,
         format: subtitleFormat,
+        language: trackLanguage,
       });
       setRenderedBlob(
         blob,
@@ -253,7 +271,7 @@ export function DubbingStudioPage() {
 
     try {
       const { blob, filename } = await api.dubVideo(project.id, {
-        target_language: targetLanguage,
+        language: trackLanguage,
         tts_model: ttsModel,
         voice,
         speed,
@@ -271,6 +289,77 @@ export function DubbingStudioPage() {
       );
     } finally {
       setMediaLoading(null);
+    }
+  };
+
+  const handleCombinedVideo = async (mode: "soft" | "hard") => {
+    if (!project) return;
+    const loadingKey = mode === "hard" ? "combined-hard" : "combined-soft";
+    setMediaLoading(loadingKey);
+    setError(null);
+
+    try {
+      const { blob, filename } = await api.dubAndSubtitleVideo(project.id, {
+        language: trackLanguage,
+        subtitle_mode: mode,
+        subtitle_format: subtitleFormat,
+        tts_model: ttsModel,
+        voice,
+        speed,
+        pitch: 1,
+        original_volume: effectiveOriginalVolume,
+        whisper_model: "whisper-base",
+      });
+      setRenderedBlob(
+        blob,
+        filename,
+        mode === "hard"
+          ? "Dubbed hard-burned subtitle render"
+          : "Dubbed soft subtitle render",
+      );
+      setLastRenderAction(mode === "hard" ? "combined-hard" : "combined-soft");
+      const refreshed = await api.getTranscription(project.id);
+      setProject(refreshed);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to render dubbed subtitled video",
+      );
+    } finally {
+      setMediaLoading(null);
+    }
+  };
+
+  const handleGenerateTrackAudio = async (replaceExisting = false) => {
+    if (!project || trackLanguage === "original") return;
+    setGeneratingTrackAudio(true);
+    setError(null);
+
+    try {
+      const response = await api.generateTranslatedTTS(project.id, {
+        target_language: trackLanguage,
+        tts_model: ttsModel,
+        voice,
+        speed,
+        replace_existing: replaceExisting,
+      });
+      const refreshed = await api.getTranscription(project.id);
+      setProject({
+        ...refreshed,
+        translations: {
+          ...(refreshed.translations || {}),
+          [response.translation.language]: response.translation,
+        },
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to generate translated audio",
+      );
+    } finally {
+      setGeneratingTrackAudio(false);
     }
   };
 
@@ -312,6 +401,10 @@ export function DubbingStudioPage() {
     if (!lastRenderAction) return;
     if (lastRenderAction === "dub") {
       await handleDubVideo();
+    } else if (lastRenderAction === "combined-soft") {
+      await handleCombinedVideo("soft");
+    } else if (lastRenderAction === "combined-hard") {
+      await handleCombinedVideo("hard");
     } else {
       await handleEmbedVideo(lastRenderAction);
     }
@@ -359,7 +452,7 @@ export function DubbingStudioPage() {
                 <span>
                   <strong>{item.filename}</strong>
                   <small>
-                    {item.result.language || "Auto"} ·{" "}
+                    {item.result.language || "Auto"} -{" "}
                     {formatDate(item.created_at)}
                   </small>
                 </span>
@@ -503,6 +596,8 @@ export function DubbingStudioPage() {
                   {project.is_video ? "Video source" : "Audio source"}
                 </span>
                 <span>{segments.length} timed segments</span>
+                <span>{trackLabel} track</span>
+                <span>{translationEntries.length} translations</span>
                 <span>{project.model_used}</span>
                 <span>{project.result.language || "Auto language"}</span>
               </div>
@@ -577,18 +672,35 @@ export function DubbingStudioPage() {
         <section className="glass-card config-card">
           <h2>Dubbing Config</h2>
           <label>
-            Target Language
+            Track Language
             <select
-              value={targetLanguage}
-              onChange={(event) => setTargetLanguage(event.target.value)}
+              value={trackLanguage}
+              onChange={(event) => setTrackLanguage(event.target.value)}
             >
-              {SUPERTONIC_LANGUAGES.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.label}
+              <option value="original">Original transcript</option>
+              {translationEntries.map((translation) => (
+                <option key={translation.language} value={translation.language}>
+                  {SUPERTONIC_LANGUAGES.find(
+                    (item) => item.code === translation.language,
+                  )?.label || translation.language.toUpperCase()}
                 </option>
               ))}
             </select>
           </label>
+          {trackLanguage !== "original" && (
+            <div className="translation-status">
+              <strong>{trackLabel} translation</strong>
+              <span>
+                {selectedTranslation
+                  ? `${selectedTranslation.segments.length} segments - ${
+                      selectedTranslation.tts_audio_path
+                        ? "audio ready"
+                        : "audio required before final dub"
+                    }`
+                  : "Select a saved Live Studio translation."}
+              </span>
+            </div>
+          )}
           <label>
             TTS Model
             <select
@@ -731,47 +843,136 @@ export function DubbingStudioPage() {
                 <strong>Download Subtitle Tracks</strong>
                 <span>Deliver standalone captions</span>
               </button>
+              {!enableDubbing && (
+                <>
+                  <button
+                    className="export-option"
+                    type="button"
+                    disabled={!canExportVideo || mediaLoading !== null}
+                    onClick={() => handleEmbedVideo("soft")}
+                  >
+                    <strong>
+                      {mediaLoading === "soft"
+                        ? "Rendering..."
+                        : "Preview Soft Subtitles"}
+                    </strong>
+                    <span>Generate selectable subtitle video</span>
+                  </button>
+                  <button
+                    className="export-option"
+                    type="button"
+                    disabled={!canExportVideo || mediaLoading !== null}
+                    onClick={() => handleEmbedVideo("hard")}
+                  >
+                    <strong>
+                      {mediaLoading === "hard"
+                        ? "Rendering..."
+                        : "Preview Hard Burn"}
+                    </strong>
+                    <span>Generate permanent subtitle render</span>
+                  </button>
+                </>
+              )}
+            </>
+          )}
+          {enableSubtitles && enableDubbing && (
+            <>
               <button
                 className="export-option"
                 type="button"
-                disabled={!canExportVideo || mediaLoading !== null}
-                onClick={() => handleEmbedVideo("soft")}
+                disabled={
+                  !canExportVideo ||
+                  mediaLoading !== null ||
+                  generatingTrackAudio ||
+                  !selectedTrackHasAudio
+                }
+                onClick={() => handleCombinedVideo("soft")}
               >
                 <strong>
-                  {mediaLoading === "soft"
-                    ? "Rendering..."
-                    : "Preview Soft Subtitles"}
+                  {mediaLoading === "combined-soft"
+                    ? "Rendering dub + soft subtitles..."
+                    : "Render Dub + Soft Subtitles"}
                 </strong>
-                <span>Generate selectable subtitle video</span>
+                <span>
+                  {trackLabel} audio and selectable subtitles in one render
+                </span>
               </button>
               <button
                 className="export-option"
                 type="button"
-                disabled={!canExportVideo || mediaLoading !== null}
-                onClick={() => handleEmbedVideo("hard")}
+                disabled={
+                  !canExportVideo ||
+                  mediaLoading !== null ||
+                  generatingTrackAudio ||
+                  !selectedTrackHasAudio
+                }
+                onClick={() => handleCombinedVideo("hard")}
               >
                 <strong>
-                  {mediaLoading === "hard"
-                    ? "Rendering..."
-                    : "Preview Hard Burn"}
+                  {mediaLoading === "combined-hard"
+                    ? "Rendering dub + hard burn..."
+                    : "Render Dub + Hard Burn"}
                 </strong>
-                <span>Generate permanent subtitle render</span>
+                <span>
+                  {trackLabel} audio and permanent subtitles in one render
+                </span>
               </button>
             </>
           )}
           {enableDubbing && (
-            <button
-              className="studio-button primary full"
-              type="button"
-              disabled={!canExportVideo || mediaLoading !== null}
-              onClick={handleDubVideo}
-            >
-              {mediaLoading === "dub"
-                ? "Rendering Final Dub"
-                : replaceOriginalAudio
-                  ? "Render Dub and Replace Audio"
-                  : "Render Final Dub"}
-            </button>
+            <>
+              {trackLanguage !== "original" && !selectedTrackHasAudio && (
+                <button
+                  className="export-option"
+                  type="button"
+                  disabled={!selectedTranslation || generatingTrackAudio}
+                  onClick={() => handleGenerateTrackAudio(false)}
+                >
+                  <strong>
+                    {generatingTrackAudio
+                      ? "Generating translated audio..."
+                      : "Generate Translated Audio"}
+                  </strong>
+                  <span>Required before rendering the translated dub</span>
+                </button>
+              )}
+              {trackLanguage !== "original" && selectedTrackHasAudio && (
+                <button
+                  className="export-option"
+                  type="button"
+                  disabled={generatingTrackAudio}
+                  onClick={() => handleGenerateTrackAudio(true)}
+                >
+                  <strong>
+                    {generatingTrackAudio
+                      ? "Regenerating translated audio..."
+                      : "Redo Translated Audio"}
+                  </strong>
+                  <span>
+                    Refresh the saved dub track with current voice settings
+                  </span>
+                </button>
+              )}
+              {!enableSubtitles && (
+                <button
+                  className="studio-button primary full"
+                  type="button"
+                  disabled={
+                    !canExportVideo ||
+                    mediaLoading !== null ||
+                    generatingTrackAudio ||
+                    !selectedTrackHasAudio
+                  }
+                  onClick={handleDubVideo}
+                >
+                  {mediaLoading === "dub"
+                    ? "Rendering Final Dub"
+                    : replaceOriginalAudio
+                      ? "Render Dub and Replace Audio"
+                      : "Render Final Dub"}
+                </button>
+              )}
+            </>
           )}
           {!enableSubtitles && !enableDubbing && (
             <div className="empty-panel small">

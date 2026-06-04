@@ -24,6 +24,23 @@ class TranscriptionResult(BaseModel):
     model_type: Literal["whisper", "parakeet"] = "whisper"
 
 
+class TranslationResult(BaseModel):
+    """Persisted translated transcript and optional translated audio."""
+
+    language: str
+    source_language: Optional[str] = None
+    model: str
+    text: str
+    segments: list[TranscriptionSegment] = Field(default_factory=list)
+    created_at: str
+    tts_audio_path: Optional[str] = None
+    tts_voice: Optional[str] = None
+    tts_model: Optional[str] = None
+    tts_speed: Optional[float] = None
+    tts_duration: Optional[float] = None
+    tts_sample_rate: Optional[int] = None
+
+
 class TranscriptionResponse(BaseModel):
     """API response for transcription"""
 
@@ -50,6 +67,10 @@ class TranscriptionInfo(BaseModel):
     model_used: str
     model_type: Literal["whisper", "parakeet"]
     time_taken: float
+    source_size: Optional[int] = None
+    subtitle_paths: dict[str, str] = Field(default_factory=dict)
+    media_paths: dict[str, str] = Field(default_factory=dict)
+    translations: dict[str, TranslationResult] = Field(default_factory=dict)
 
 
 class STTModelInfo(BaseModel):
@@ -68,6 +89,35 @@ class STTModelsResponse(BaseModel):
     default_model: str
     default_whisper: str
     default_parakeet: Optional[str] = None
+
+
+class TranslationLanguageInfo(BaseModel):
+    """Supported translation language shown in the UI."""
+
+    code: str
+    name: str
+    nllb_code: str
+    tts_supported: bool = True
+
+
+class TranslationModelInfo(BaseModel):
+    """Information about a translation model."""
+
+    id: str
+    name: str
+    description: str
+    device: str
+    compute_type: str
+    languages: list[TranslationLanguageInfo]
+
+
+class TranslationModelsResponse(BaseModel):
+    """Response for listing translation models."""
+
+    models: list[TranslationModelInfo]
+    default_model: str
+    default_source_language: str
+    default_target_language: str
 
 
 class SubtitleFormat(BaseModel):

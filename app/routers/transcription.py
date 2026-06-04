@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse
 
 from app.models.transcription import (
     STTModelsResponse,
+    TranslationModelsResponse,
 )
 from app.services.transcription_service import (
     transcription_cache,
@@ -28,16 +29,29 @@ from app.services.transcription_service import (
     persist_transcription_cache,
 )
 from app.services.subtitle_service import (
+    ORIGINAL_TRACK,
     get_subtitle_media_type,
+    normalize_track_language,
     write_subtitle_file,
 )
 from app.services.media_service import (
     TranslationNotConfiguredError,
+    create_dubbed_subtitled_video,
     create_dubbed_video,
     create_subtitled_video,
     get_video_media_type,
 )
 from app.services.tts_service import DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE
+from app.services.translation_service import (
+    DEFAULT_TRANSLATION_MODEL,
+    DEFAULT_TRANSLATION_SOURCE_LANGUAGE,
+    DEFAULT_TRANSLATION_TARGET_LANGUAGE,
+    TranslationBackendUnavailableError,
+    generate_translation_tts_audio,
+    get_available_translation_models,
+    normalize_translation_language_code,
+    translate_transcription,
+)
 
 
 # Router instance
@@ -58,6 +72,9 @@ def _remove_transcription_artifacts(transcription: dict[str, Any]) -> None:
         paths.append(transcription["source_path"])
     paths.extend(transcription.get("subtitle_paths", {}).values())
     paths.extend(transcription.get("media_paths", {}).values())
+    for translation in (transcription.get("translations") or {}).values():
+        if translation.get("tts_audio_path"):
+            paths.append(translation["tts_audio_path"])
 
     for path in paths:
         safe_remove_file(str(path))
@@ -105,6 +122,17 @@ async def list_stt_models() -> STTModelsResponse:
         default_parakeet=getattr(
             settings, "PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3"
         ),
+    )
+
+
+@router.get("/translation/models", response_model=TranslationModelsResponse)
+async def list_translation_models() -> TranslationModelsResponse:
+    """List available translation models and Live Studio target languages."""
+    return TranslationModelsResponse(
+        models=get_available_translation_models(),
+        default_model=DEFAULT_TRANSLATION_MODEL,
+        default_source_language=DEFAULT_TRANSLATION_SOURCE_LANGUAGE,
+        default_target_language=DEFAULT_TRANSLATION_TARGET_LANGUAGE,
     )
 
 
@@ -199,6 +227,93 @@ async def get_transcription_media(
     return _file_response_for_path(media_path)
 
 
+@router.post("/transcription/{transcription_id}/translate")
+async def translate_transcription_route(
+    transcription_id: str,
+    source_language: Optional[str] = Form(None, description="Source language code"),
+    target_language: str = Form(..., description="Target language code"),
+    model: str = Form(
+        DEFAULT_TRANSLATION_MODEL, description="Translation model to use"
+    ),
+) -> dict[str, Any]:
+    """Translate a saved transcription while preserving segment timestamps."""
+    transcription = _get_transcription_or_404(transcription_id)
+
+    try:
+        translation = translate_transcription(
+            transcription=transcription,
+            source_language=source_language,
+            target_language=target_language,
+            model_name=model,
+        )
+        persist_transcription_cache()
+    except TranslationBackendUnavailableError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "transcription_id": transcription_id,
+        "translation": translation,
+    }
+
+
+@router.post("/transcription/{transcription_id}/translate/tts")
+async def generate_translated_tts_route(
+    transcription_id: str,
+    target_language: str = Form(..., description="Saved translation language code"),
+    tts_model: str = Form(DEFAULT_TTS_MODEL, description="TTS model to use"),
+    voice: str = Form(DEFAULT_TTS_VOICE, description="Supertonic voice preset"),
+    speed: float = Form(1.0, description="Speech speed (0.7-2.0)"),
+    replace_existing: bool = Form(
+        False, description="Regenerate existing translated audio"
+    ),
+) -> dict[str, Any]:
+    """Generate timestamp-aligned TTS audio for a saved translation."""
+    transcription = _get_transcription_or_404(transcription_id)
+
+    try:
+        translation = generate_translation_tts_audio(
+            transcription_id=transcription_id,
+            transcription=transcription,
+            target_language=target_language,
+            tts_model=tts_model,
+            voice=voice,
+            speed=speed,
+            replace_existing=replace_existing,
+        )
+        persist_transcription_cache()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "transcription_id": transcription_id,
+        "translation": translation,
+    }
+
+
+@router.get("/transcription/{transcription_id}/translation/{language}/audio")
+async def get_translation_audio(transcription_id: str, language: str) -> FileResponse:
+    """Stream generated translated TTS audio for a saved translation."""
+    transcription = _get_transcription_or_404(transcription_id)
+
+    try:
+        target = normalize_translation_language_code(language)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    translation = (transcription.get("translations") or {}).get(target)
+    if not translation or not translation.get("tts_audio_path"):
+        raise HTTPException(status_code=404, detail="Translated audio is not available")
+
+    return _file_response_for_path(
+        translation["tts_audio_path"],
+        f"{transcription_id}_translation_{target}.wav",
+    )
+
+
 @router.delete("/transcription/{transcription_id}")
 async def delete_transcription(transcription_id: str) -> dict[str, str]:
     """Delete a transcription result"""
@@ -222,6 +337,7 @@ async def list_transcriptions() -> dict[str, Any]:
 async def get_subtitle(
     transcription_id: str,
     format: str = Query("srt", description="Subtitle format: srt or vtt"),
+    language: str = Query("original", description="Subtitle track language"),
 ) -> FileResponse:
     """
     Download subtitle file for a transcription
@@ -229,11 +345,17 @@ async def get_subtitle(
     Args:
         transcription_id: ID of the transcription
         format: Subtitle format (srt or vtt)
+        language: Subtitle track language, or original
     """
     transcription = _get_transcription_or_404(transcription_id)
 
     try:
-        subtitle_path = write_subtitle_file(transcription_id, transcription, format)
+        subtitle_path = write_subtitle_file(
+            transcription_id,
+            transcription,
+            format,
+            language=language,
+        )
         persist_transcription_cache()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -242,7 +364,10 @@ async def get_subtitle(
         path=subtitle_path,
         media_type=get_subtitle_media_type(format),
         filename=subtitle_path.name,
-        headers={"X-Transcription-ID": transcription_id},
+        headers={
+            "X-Transcription-ID": transcription_id,
+            "X-Track-Language": normalize_track_language(language),
+        },
     )
 
 
@@ -250,9 +375,14 @@ async def get_subtitle(
 async def post_subtitle(
     transcription_id: str,
     format: str = Form("srt", description="Subtitle format: srt or vtt"),
+    language: str = Form("original", description="Subtitle track language"),
 ) -> FileResponse:
     """Backward-compatible subtitle download endpoint for older clients."""
-    return await get_subtitle(transcription_id=transcription_id, format=format)
+    return await get_subtitle(
+        transcription_id=transcription_id,
+        format=format,
+        language=language,
+    )
 
 
 @router.post("/subtitle/{transcription_id}/embed")
@@ -260,6 +390,7 @@ async def embed_subtitle_in_video(
     transcription_id: str,
     mode: str = Form("soft", description="Subtitle mode: soft or hard"),
     format: str = Form("srt", description="Subtitle format: srt or vtt"),
+    language: str = Form("original", description="Subtitle track language"),
 ) -> FileResponse:
     """
     Generate a video with subtitles embedded.
@@ -270,12 +401,15 @@ async def embed_subtitle_in_video(
     transcription = _get_transcription_or_404(transcription_id)
 
     try:
-        output_path = create_subtitled_video(
-            transcription_id=transcription_id,
-            transcription=transcription,
-            mode=mode,
-            format=format,
-        )
+        kwargs: dict[str, Any] = {
+            "transcription_id": transcription_id,
+            "transcription": transcription,
+            "mode": mode,
+            "format": format,
+        }
+        if normalize_track_language(language) != ORIGINAL_TRACK:
+            kwargs["language"] = language
+        output_path = create_subtitled_video(**kwargs)
         persist_transcription_cache()
     except FileNotFoundError as exc:
         raise HTTPException(status_code=410, detail=str(exc)) from exc
@@ -291,6 +425,7 @@ async def embed_subtitle_in_video(
         headers={
             "X-Transcription-ID": transcription_id,
             "X-Subtitle-Mode": mode,
+            "X-Track-Language": normalize_track_language(language),
         },
     )
 
@@ -298,8 +433,12 @@ async def embed_subtitle_in_video(
 @router.post("/dub/{transcription_id}")
 async def dub_video(
     transcription_id: str,
+    language: Optional[str] = Form(
+        None, description="Saved track language, or original"
+    ),
     target_language: Optional[str] = Form(
-        None, description="Optional target language. Use 'en' for Whisper translation."
+        None,
+        description="Legacy optional target language. Use 'en' for Whisper translation.",
     ),
     tts_model: str = Form(DEFAULT_TTS_MODEL, description="TTS model to use"),
     voice: str = Form(
@@ -331,6 +470,7 @@ async def dub_video(
         output_path = create_dubbed_video(
             transcription_id=transcription_id,
             transcription=transcription,
+            language=language,
             target_language=target_language,
             tts_model=tts_model,
             voice=voice,
@@ -353,5 +493,81 @@ async def dub_video(
         path=output_path,
         media_type=get_video_media_type(Path(output_path)),
         filename=Path(output_path).name,
-        headers={"X-Transcription-ID": transcription_id},
+        headers={
+            "X-Transcription-ID": transcription_id,
+            "X-Track-Language": normalize_track_language(language),
+        },
+    )
+
+
+@router.post("/dub/{transcription_id}/subtitle")
+async def dub_and_subtitle_video(
+    transcription_id: str,
+    language: Optional[str] = Form(
+        None, description="Saved track language, or original"
+    ),
+    subtitle_mode: str = Form("hard", description="Subtitle mode: soft or hard"),
+    subtitle_format: str = Form("srt", description="Subtitle format: srt or vtt"),
+    target_language: Optional[str] = Form(
+        None,
+        description="Legacy optional target language. Use 'en' for Whisper translation.",
+    ),
+    tts_model: str = Form(DEFAULT_TTS_MODEL, description="TTS model to use"),
+    voice: str = Form(
+        DEFAULT_TTS_VOICE, description="Supertonic voice preset: M1-M5 or F1-F5"
+    ),
+    speed: float = Form(1.0, description="Speech speed (0.7-2.0)"),
+    pitch: float = Form(
+        1.0, description="Accepted for compatibility; ignored by Supertonic"
+    ),
+    original_volume: float = Form(
+        0.15,
+        description="Original audio bed volume from 0.0 to 1.0. Use 0.0 to replace original audio with the dub.",
+    ),
+    whisper_model: str = Form(
+        "whisper-base", description="Whisper model for optional English translation"
+    ),
+) -> FileResponse:
+    """Generate one final video containing both dubbing and subtitles."""
+    transcription = _get_transcription_or_404(transcription_id)
+
+    if original_volume < 0 or original_volume > 1:
+        raise HTTPException(
+            status_code=400, detail="original_volume must be between 0.0 and 1.0"
+        )
+
+    try:
+        output_path = create_dubbed_subtitled_video(
+            transcription_id=transcription_id,
+            transcription=transcription,
+            language=language,
+            subtitle_mode=subtitle_mode,
+            subtitle_format=subtitle_format,
+            target_language=target_language,
+            tts_model=tts_model,
+            voice=voice,
+            speed=speed,
+            pitch=pitch,
+            original_volume=original_volume,
+            whisper_model=whisper_model,
+        )
+        persist_transcription_cache()
+    except TranslationNotConfiguredError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return FileResponse(
+        path=output_path,
+        media_type=get_video_media_type(Path(output_path)),
+        filename=Path(output_path).name,
+        headers={
+            "X-Transcription-ID": transcription_id,
+            "X-Track-Language": normalize_track_language(language),
+            "X-Subtitle-Mode": subtitle_mode,
+        },
     )

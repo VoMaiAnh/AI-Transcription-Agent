@@ -3,13 +3,14 @@ Subtitle generation service for creating SRT and VTT files
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, cast
 
 from app.config import settings
 from app.models.transcription import TranscriptionSegment
 from app.utils.file_utils import sanitize_filename
 
 SUPPORTED_SUBTITLE_FORMATS = {"srt", "vtt"}
+ORIGINAL_TRACK = "original"
 
 
 def normalize_subtitle_format(format: str = "srt") -> str:
@@ -31,6 +32,38 @@ def normalize_subtitle_format(format: str = "srt") -> str:
         raise ValueError(f"Unsupported subtitle format: {format}. Use 'srt' or 'vtt'.")
 
     return format_lower
+
+
+def normalize_track_language(language: Optional[str] = None) -> str:
+    """Normalize a subtitle/dub track selector."""
+    normalized = (language or ORIGINAL_TRACK).strip().lower()
+    if not normalized or normalized in {"source", "original", "default"}:
+        return ORIGINAL_TRACK
+    return normalized
+
+
+def _subtitle_cache_key(format: str, language: Optional[str] = None) -> str:
+    """Return a stable subtitle cache key."""
+    track = normalize_track_language(language)
+    return format if track == ORIGINAL_TRACK else f"{track}_{format}"
+
+
+def get_track_result(
+    transcription: dict[str, Any],
+    language: Optional[str] = None,
+) -> dict[str, Any]:
+    """Return the original or translated transcript result for a track."""
+    track = normalize_track_language(language)
+    if track == ORIGINAL_TRACK:
+        return cast(dict[str, Any], transcription["result"])
+
+    translations = cast(
+        dict[str, dict[str, Any]], transcription.get("translations") or {}
+    )
+    translation = translations.get(track)
+    if not translation:
+        raise ValueError(f"No saved translation for language '{track}'.")
+    return translation
 
 
 def _split_milliseconds(seconds: float) -> tuple[int, int, int, int]:
@@ -223,16 +256,19 @@ def get_subtitle_extension(format: str = "srt") -> str:
 
 def get_segments_from_transcription(
     transcription: dict[str, Any],
+    language: Optional[str] = None,
 ) -> list[TranscriptionSegment]:
     """
     Build typed subtitle segments from a cached transcription entry.
 
     Args:
         transcription: Cached transcription data
+        language: Optional track language, or original
 
     Returns:
         List of TranscriptionSegment objects
     """
+    track_result = get_track_result(transcription, language)
     return [
         TranscriptionSegment(
             id=seg["id"],
@@ -240,7 +276,7 @@ def get_segments_from_transcription(
             end=seg["end"],
             text=seg["text"],
         )
-        for seg in transcription["result"].get("segments", [])
+        for seg in track_result.get("segments", [])
     ]
 
 
@@ -248,6 +284,7 @@ def get_subtitle_output_path(
     transcription_id: str,
     transcription: dict[str, Any],
     format: str = "srt",
+    language: Optional[str] = None,
 ) -> Path:
     """
     Build a stable subtitle output path for a transcription.
@@ -256,14 +293,18 @@ def get_subtitle_output_path(
         transcription_id: Transcription ID
         transcription: Cached transcription data
         format: Subtitle format
+        language: Optional track language, or original
 
     Returns:
         Output path for the subtitle file
     """
     format_lower = normalize_subtitle_format(format)
+    track = normalize_track_language(language)
     original_filename = transcription.get("filename") or "subtitle"
     safe_name = sanitize_filename(original_filename)
     base_name = Path(safe_name).stem or "subtitle"
+    if track != ORIGINAL_TRACK:
+        base_name = f"{base_name}_{track}"
     extension = get_subtitle_extension(format_lower)
     return settings.subtitle_output_dir / f"{transcription_id}_{base_name}{extension}"
 
@@ -272,6 +313,7 @@ def write_subtitle_file(
     transcription_id: str,
     transcription: dict[str, Any],
     format: str = "srt",
+    language: Optional[str] = None,
 ) -> Path:
     """
     Generate and persist a subtitle file for a transcription.
@@ -280,6 +322,7 @@ def write_subtitle_file(
         transcription_id: Transcription ID
         transcription: Cached transcription data
         format: Subtitle format
+        language: Optional track language, or original
 
     Returns:
         Path to generated subtitle file
@@ -288,7 +331,7 @@ def write_subtitle_file(
         ValueError: If no timed segments are available or format is unsupported
     """
     format_lower = normalize_subtitle_format(format)
-    segments = get_segments_from_transcription(transcription)
+    segments = get_segments_from_transcription(transcription, language)
 
     if not segments:
         raise ValueError(
@@ -298,11 +341,13 @@ def write_subtitle_file(
 
     subtitle_content = generate_subtitle(segments, format_lower)
     subtitle_path = get_subtitle_output_path(
-        transcription_id, transcription, format_lower
+        transcription_id, transcription, format_lower, language
     )
     subtitle_path.parent.mkdir(parents=True, exist_ok=True)
     subtitle_path.write_text(subtitle_content, encoding="utf-8")
 
-    transcription.setdefault("subtitle_paths", {})[format_lower] = str(subtitle_path)
+    transcription.setdefault("subtitle_paths", {})[
+        _subtitle_cache_key(format_lower, language)
+    ] = str(subtitle_path)
 
     return subtitle_path

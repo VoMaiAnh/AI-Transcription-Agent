@@ -720,6 +720,7 @@ option {
 .waveform-card,
 .transcript-card,
 .dubbing-controls,
+.translation-controls,
 .media-workbench,
 .timeline-card,
 .voice-library,
@@ -1161,6 +1162,53 @@ label {
 .dubbing-controls {
   display: grid;
   gap: 16px;
+}
+
+.translation-controls {
+  display: grid;
+  gap: 16px;
+}
+
+.track-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.track-tabs button {
+  min-height: 32px;
+  padding: 6px 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-weight: 800;
+}
+
+.track-tabs button.active {
+  color: var(--primary-text);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.translation-status {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  color: var(--muted);
+  background: rgba(205, 242, 0, 0.055);
+  border: 1px solid rgba(205, 242, 0, 0.2);
+  border-radius: 6px;
+}
+
+.translation-status strong {
+  color: #fff;
+}
+
+.translation-status span {
+  color: var(--muted-soft);
+  font-size: 13px;
 }
 
 .range-control {

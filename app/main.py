@@ -79,7 +79,7 @@ def create_app() -> FastAPI:
     if frontend_assets.exists():
         app.mount("/assets", StaticFiles(directory=str(frontend_assets)), name="assets")
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.get("/", response_class=HTMLResponse, response_model=None)
     async def root(request: Request) -> HTMLResponse | dict[str, str]:
         """
         Root endpoint - serves the frontend application or API info

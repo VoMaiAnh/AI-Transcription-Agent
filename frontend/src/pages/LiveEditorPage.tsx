@@ -1,7 +1,14 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import * as api from "../api/client";
-import { TranscriptionResponse, TTSModel, TTSVoice } from "../types";
+import {
+  TranscriptionResponse,
+  TranslationLanguage,
+  TranslationModel,
+  TranslationResult,
+  TTSModel,
+  TTSVoice,
+} from "../types";
 import {
   ALLOWED_MEDIA_EXTENSIONS,
   downloadBlob,
@@ -137,6 +144,46 @@ const FALLBACK_TTS_VOICES: TTSVoice[] = [
   },
 ];
 
+const FALLBACK_TRANSLATION_LANGUAGES: TranslationLanguage[] = [
+  { code: "en", name: "English", nllb_code: "eng_Latn", tts_supported: true },
+  { code: "es", name: "Spanish", nllb_code: "spa_Latn", tts_supported: true },
+  { code: "fr", name: "French", nllb_code: "fra_Latn", tts_supported: true },
+  { code: "de", name: "German", nllb_code: "deu_Latn", tts_supported: true },
+  { code: "ja", name: "Japanese", nllb_code: "jpn_Jpan", tts_supported: true },
+  { code: "ko", name: "Korean", nllb_code: "kor_Hang", tts_supported: true },
+  {
+    code: "pt",
+    name: "Portuguese",
+    nllb_code: "por_Latn",
+    tts_supported: true,
+  },
+  { code: "ru", name: "Russian", nllb_code: "rus_Cyrl", tts_supported: true },
+  { code: "ar", name: "Arabic", nllb_code: "arb_Arab", tts_supported: true },
+  { code: "hi", name: "Hindi", nllb_code: "hin_Deva", tts_supported: true },
+  { code: "it", name: "Italian", nllb_code: "ita_Latn", tts_supported: true },
+  { code: "nl", name: "Dutch", nllb_code: "nld_Latn", tts_supported: true },
+  { code: "pl", name: "Polish", nllb_code: "pol_Latn", tts_supported: true },
+  { code: "tr", name: "Turkish", nllb_code: "tur_Latn", tts_supported: true },
+  { code: "uk", name: "Ukrainian", nllb_code: "ukr_Cyrl", tts_supported: true },
+  {
+    code: "vi",
+    name: "Vietnamese",
+    nllb_code: "vie_Latn",
+    tts_supported: true,
+  },
+];
+
+const FALLBACK_TRANSLATION_MODELS: TranslationModel[] = [
+  {
+    id: "JustFrederik/nllb-200-distilled-600M-ct2-int8",
+    name: "NLLB-200 Distilled 600M CT2 int8",
+    description: "CPU-focused timestamp-preserving transcript translation.",
+    device: "cpu",
+    compute_type: "int8",
+    languages: FALLBACK_TRANSLATION_LANGUAGES,
+  },
+];
+
 function mergeById<T extends { id: string }>(fallback: T[], remote: T[]): T[] {
   const merged = new Map<string, T>();
   fallback.forEach((item) => merged.set(item.id, item));
@@ -153,9 +200,27 @@ export function LiveEditorPage() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<TranscriptionResponse | null>(null);
+  const [translations, setTranslations] = useState<
+    Record<string, TranslationResult>
+  >({});
+  const [transcriptView, setTranscriptView] = useState("original");
   const [error, setError] = useState<string | null>(null);
   const [ttsModels, setTtsModels] = useState<TTSModel[]>(FALLBACK_TTS_MODELS);
   const [voices, setVoices] = useState<TTSVoice[]>(FALLBACK_TTS_VOICES);
+  const [translationModels, setTranslationModels] = useState<
+    TranslationModel[]
+  >(FALLBACK_TRANSLATION_MODELS);
+  const [translationModel, setTranslationModel] = useState(
+    FALLBACK_TRANSLATION_MODELS[0].id,
+  );
+  const [translationTargetLanguage, setTranslationTargetLanguage] =
+    useState("es");
+  const [translating, setTranslating] = useState(false);
+  const [generatingTranslatedAudio, setGeneratingTranslatedAudio] =
+    useState(false);
+  const [translatedAudioUrl, setTranslatedAudioUrl] = useState<string | null>(
+    null,
+  );
   const [ttsModel, setTtsModel] = useState("Supertone/supertonic-3");
   const [voice, setVoice] = useState("M1");
   const [ttsLanguage, setTtsLanguage] = useState("en");
@@ -185,6 +250,17 @@ export function LiveEditorPage() {
       ),
     [ttsModelFamily, voices],
   );
+  const selectedTranslationModel = useMemo(
+    () => translationModels.find((item) => item.id === translationModel),
+    [translationModel, translationModels],
+  );
+  const translationLanguages = selectedTranslationModel?.languages.length
+    ? selectedTranslationModel.languages.filter((item) => item.tts_supported)
+    : FALLBACK_TRANSLATION_LANGUAGES;
+  const activeTranslation =
+    transcriptView === "original" ? null : translations[transcriptView] || null;
+  const activeTranscriptText = activeTranslation?.text || result?.text || "";
+  const activeSegments = activeTranslation?.segments || result?.segments || [];
 
   const fileKind = useMemo<"audio" | "video" | null>(() => {
     if (!file) return null;
@@ -207,25 +283,36 @@ export function LiveEditorPage() {
   useEffect(() => {
     let mounted = true;
 
-    async function loadTtsOptions() {
+    async function loadModelOptions() {
       try {
-        const [modelsData, voicesData] = await Promise.all([
+        const [modelsData, voicesData, translationData] = await Promise.all([
           api.getTTSModels(),
           api.getTTSVoices(),
+          api.getTranslationModels(),
         ]);
         if (!mounted) return;
         setTtsModels(mergeById(FALLBACK_TTS_MODELS, modelsData.models));
         setVoices(mergeById(FALLBACK_TTS_VOICES, voicesData.voices));
         setTtsModel(modelsData.default_model || "Supertone/supertonic-3");
         setVoice(voicesData.default_voice || "M1");
+        setTranslationModels(
+          mergeById(FALLBACK_TRANSLATION_MODELS, translationData.models),
+        );
+        setTranslationModel(
+          translationData.default_model || FALLBACK_TRANSLATION_MODELS[0].id,
+        );
+        setTranslationTargetLanguage(
+          translationData.default_target_language || "es",
+        );
       } catch {
         if (!mounted) return;
         setTtsModels(FALLBACK_TTS_MODELS);
         setVoices(FALLBACK_TTS_VOICES);
+        setTranslationModels(FALLBACK_TRANSLATION_MODELS);
       }
     }
 
-    loadTtsOptions();
+    loadModelOptions();
     return () => {
       mounted = false;
     };
@@ -258,6 +345,9 @@ export function LiveEditorPage() {
           model_type: item.model_type,
           is_video: item.is_video,
         });
+        setTranslations(item.translations || {});
+        setTranscriptView("original");
+        setTranslatedAudioUrl(null);
         setModel(item.model_used);
         setLanguage(item.result.language || "");
       } catch (err) {
@@ -309,6 +399,19 @@ export function LiveEditorPage() {
     }
   }, [filteredVoices, supportsVoicePresets, voice]);
 
+  useEffect(() => {
+    if (!result?.transcription_id || !activeTranslation?.tts_audio_path) {
+      setTranslatedAudioUrl(null);
+      return;
+    }
+    setTranslatedAudioUrl(
+      `${api.getTranslationAudioUrl(
+        result.transcription_id,
+        activeTranslation.language,
+      )}?t=${Date.now()}`,
+    );
+  }, [activeTranslation, result?.transcription_id]);
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
@@ -321,6 +424,9 @@ export function LiveEditorPage() {
 
     setFile(selectedFile);
     setResult(null);
+    setTranslations({});
+    setTranscriptView("original");
+    setTranslatedAudioUrl(null);
     setAudioUrl(null);
     setError(null);
   };
@@ -348,6 +454,9 @@ export function LiveEditorPage() {
         task,
       });
       setResult(response);
+      setTranslations({});
+      setTranscriptView("original");
+      setTranslatedAudioUrl(null);
       setProgress(100);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Transcription failed");
@@ -358,10 +467,11 @@ export function LiveEditorPage() {
   };
 
   const handleDownloadTxt = () => {
-    if (!result?.text) return;
+    if (!activeTranscriptText) return;
+    const track = activeTranslation?.language || "original";
     downloadBlob(
-      new Blob([result.text], { type: "text/plain" }),
-      `transcription_${Date.now()}.txt`,
+      new Blob([activeTranscriptText], { type: "text/plain" }),
+      `transcription_${track}_${Date.now()}.txt`,
     );
   };
 
@@ -371,6 +481,7 @@ export function LiveEditorPage() {
       const { content, filename, mediaType } = await api.downloadSubtitle(
         result.transcription_id,
         format,
+        transcriptView,
       );
       downloadBlob(new Blob([content], { type: mediaType }), filename);
     } catch (err) {
@@ -382,14 +493,93 @@ export function LiveEditorPage() {
     }
   };
 
+  const handleTranslate = async () => {
+    if (!result?.transcription_id) {
+      setError("Run a transcription before translating.");
+      return;
+    }
+
+    setTranslating(true);
+    setError(null);
+
+    try {
+      const response = await api.translateTranscription(
+        result.transcription_id,
+        {
+          source_language: result.language || language || null,
+          target_language: translationTargetLanguage,
+          model: translationModel,
+        },
+      );
+      setTranslations((current) => ({
+        ...current,
+        [response.translation.language]: response.translation,
+      }));
+      setTranscriptView(response.translation.language);
+      setTtsLanguage(response.translation.language);
+      setTranslatedAudioUrl(
+        response.translation.tts_audio_path
+          ? `${api.getTranslationAudioUrl(
+              result.transcription_id,
+              response.translation.language,
+            )}?t=${Date.now()}`
+          : null,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Translation failed");
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  const handleGenerateTranslatedAudio = async (replaceExisting = false) => {
+    if (!result?.transcription_id || !activeTranslation) {
+      setError("Translate the transcript before generating translated audio.");
+      return;
+    }
+
+    setGeneratingTranslatedAudio(true);
+    setError(null);
+
+    try {
+      const response = await api.generateTranslatedTTS(
+        result.transcription_id,
+        {
+          target_language: activeTranslation.language,
+          tts_model: ttsModel,
+          voice: supportsVoicePresets ? voice : "",
+          speed,
+          replace_existing: replaceExisting,
+        },
+      );
+      setTranslations((current) => ({
+        ...current,
+        [response.translation.language]: response.translation,
+      }));
+      setTranslatedAudioUrl(
+        `${api.getTranslationAudioUrl(
+          result.transcription_id,
+          response.translation.language,
+        )}?t=${Date.now()}`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Translated audio generation failed",
+      );
+    } finally {
+      setGeneratingTranslatedAudio(false);
+    }
+  };
+
   const handleSynthesize = async () => {
-    if (!result?.text?.trim()) {
+    if (!activeTranscriptText.trim()) {
       setError("Run a transcription before generating speech.");
       return;
     }
 
-    const currentResult = result;
-    const text = currentResult.text.trim();
+    const text = activeTranscriptText.trim();
     setSynthesizing(true);
     setError(null);
 
@@ -399,7 +589,7 @@ export function LiveEditorPage() {
         voice: supportsVoicePresets ? voice : "",
         speed,
         pitch: 1,
-        language: ttsLanguage,
+        language: activeTranslation?.language || ttsLanguage,
         instruction: null,
         output_format: "wav",
       });
@@ -415,9 +605,12 @@ export function LiveEditorPage() {
   const clearProject = () => {
     setFile(null);
     setResult(null);
+    setTranslations({});
+    setTranscriptView("original");
     setError(null);
     setProgress(0);
     setAudioUrl(null);
+    setTranslatedAudioUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -434,7 +627,7 @@ export function LiveEditorPage() {
     }
   };
 
-  const segments = Array.isArray(result?.segments) ? result.segments : [];
+  const segments = Array.isArray(activeSegments) ? activeSegments : [];
   const transcriptItems = useMemo(() => {
     if (segments.length > 0) {
       return segments.map((segment) => ({
@@ -443,16 +636,16 @@ export function LiveEditorPage() {
         text: segment.text,
       }));
     }
-    if (!result?.text?.trim()) return [];
+    if (!activeTranscriptText.trim()) return [];
 
     return [
       {
         id: "whole-transcript",
         start: null,
-        text: result.text.trim(),
+        text: activeTranscriptText.trim(),
       },
     ];
-  }, [result?.text, segments]);
+  }, [activeTranscriptText, segments]);
 
   return (
     <div className="studio-grid editor-grid">
@@ -614,13 +807,40 @@ export function LiveEditorPage() {
         <div className="glass-card transcript-card">
           <div className="card-header">
             <h2>Interactive Transcript</h2>
-            <span className="badge">Auto-scroll On</span>
+            <span className="badge">
+              {activeTranslation
+                ? activeTranslation.language.toUpperCase()
+                : "Original"}
+            </span>
           </div>
+          {result && (
+            <div className="track-tabs">
+              <button
+                className={transcriptView === "original" ? "active" : ""}
+                type="button"
+                onClick={() => setTranscriptView("original")}
+              >
+                Original
+              </button>
+              {Object.values(translations).map((translation) => (
+                <button
+                  className={
+                    transcriptView === translation.language ? "active" : ""
+                  }
+                  key={translation.language}
+                  type="button"
+                  onClick={() => setTranscriptView(translation.language)}
+                >
+                  {translation.language.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="transcript-scroll">
             {transcriptItems.length === 0 ? (
               <div className="empty-panel">
-                {result?.text
-                  ? result.text
+                {activeTranscriptText
+                  ? activeTranscriptText
                   : "Transcript segments will appear here after transcription."}
               </div>
             ) : (
@@ -650,7 +870,9 @@ export function LiveEditorPage() {
               <button
                 className="studio-button ghost"
                 type="button"
-                onClick={() => navigator.clipboard.writeText(result.text)}
+                onClick={() =>
+                  navigator.clipboard.writeText(activeTranscriptText)
+                }
               >
                 Copy Text
               </button>
@@ -676,6 +898,97 @@ export function LiveEditorPage() {
                 VTT
               </button>
             </div>
+          )}
+        </div>
+
+        <div className="glass-card translation-controls">
+          <div className="card-header">
+            <h2>Translate Transcript</h2>
+            <span className="badge">CPU int8</span>
+          </div>
+          <div className="control-grid two">
+            <label>
+              Target Language
+              <select
+                value={translationTargetLanguage}
+                onChange={(event) =>
+                  setTranslationTargetLanguage(event.target.value)
+                }
+                disabled={!result || translating}
+              >
+                {translationLanguages.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Translation Model
+              <select
+                value={translationModel}
+                onChange={(event) => setTranslationModel(event.target.value)}
+                disabled={!result || translating}
+              >
+                {translationModels.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {selectedTranslationModel && (
+            <div className="model-feature-panel">
+              <strong>{selectedTranslationModel.name}</strong>
+              <span>
+                {selectedTranslationModel.device.toUpperCase()} -{" "}
+                {selectedTranslationModel.compute_type}
+              </span>
+              <span>{selectedTranslationModel.description}</span>
+            </div>
+          )}
+          {activeTranslation && (
+            <div className="translation-status">
+              <strong>
+                {activeTranslation.language.toUpperCase()} track ready
+              </strong>
+              <span>
+                {activeTranslation.segments.length} translated segments -{" "}
+                {activeTranslation.tts_audio_path
+                  ? "audio generated"
+                  : "audio pending"}
+              </span>
+            </div>
+          )}
+          <div className="button-row wrap">
+            <button
+              className="studio-button primary"
+              type="button"
+              onClick={handleTranslate}
+              disabled={!result || translating}
+            >
+              {translating ? "Translating" : "Translate Transcript"}
+            </button>
+            <button
+              className="studio-button lime"
+              type="button"
+              onClick={() =>
+                handleGenerateTranslatedAudio(
+                  Boolean(activeTranslation?.tts_audio_path),
+                )
+              }
+              disabled={!activeTranslation || generatingTranslatedAudio}
+            >
+              {generatingTranslatedAudio
+                ? "Generating Audio"
+                : activeTranslation?.tts_audio_path
+                  ? "Redo Translated Audio"
+                  : "Generate Translated Audio"}
+            </button>
+          </div>
+          {translatedAudioUrl && (
+            <audio className="audio-player" controls src={translatedAudioUrl} />
           )}
         </div>
 
