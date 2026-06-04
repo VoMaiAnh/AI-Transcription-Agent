@@ -653,7 +653,6 @@ export function LiveEditorPage() {
         <form className="glass-card upload-stage" onSubmit={handleSubmit}>
           <div className="card-header">
             <div>
-              <p className="eyebrow">Live Rendering</p>
               <h1>Live Editor</h1>
             </div>
             <span className="badge">

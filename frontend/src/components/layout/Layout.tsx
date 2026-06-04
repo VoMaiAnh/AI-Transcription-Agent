@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: "DB" },
@@ -8,14 +8,6 @@ const navItems = [
   { to: "/archive", label: "Archive", icon: "AR" },
   { to: "/status", label: "AI Status", icon: "AI" },
 ];
-
-const pageTitles: Record<string, string> = {
-  "/": "Project Dashboard",
-  "/editor": "Live Editor",
-  "/studio": "Dubbing Studio",
-  "/archive": "Archive",
-  "/status": "AI Status",
-};
 
 const syncraLogo = "/Logo/V1/Logo_without_BG.png";
 const sidebarStorageKey = "syncra-sidebar-collapsed";
@@ -116,8 +108,6 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
-  const location = useLocation();
-  const title = pageTitles[location.pathname] || "Syncra";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -137,21 +127,6 @@ export function Layout({ children }: LayoutProps) {
         onToggle={() => setSidebarCollapsed((current) => !current)}
       />
       <div className="studio-workspace">
-        <header className="studio-topbar">
-          <div className="topbar-left">
-            <strong>{title}</strong>
-            <nav
-              className="topbar-tabs"
-              aria-label="Secondary navigation"
-            ></nav>
-          </div>
-          <div className="topbar-right">
-            <label className="search-control">
-              <span>Search</span>
-              <input type="search" placeholder="Search tasks..." />
-            </label>
-          </div>
-        </header>
         <main className="studio-content">{children}</main>
       </div>
     </div>

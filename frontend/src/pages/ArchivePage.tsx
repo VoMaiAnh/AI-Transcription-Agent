@@ -16,11 +16,29 @@ type ArchiveItem = {
   hasSubtitles: boolean;
 };
 
+const getArchivePageSize = () => {
+  if (typeof window === "undefined") {
+    return 8;
+  }
+
+  const rowHeight = window.innerWidth <= 820 ? 98 : 72;
+  const reservedHeight = window.innerWidth <= 820 ? 460 : 380;
+  const visibleRows = Math.floor(
+    (window.innerHeight - reservedHeight) / rowHeight,
+  );
+  const minRows = window.innerWidth <= 820 ? 3 : 5;
+  const maxRows = window.innerWidth <= 1180 ? 9 : 14;
+
+  return Math.min(maxRows, Math.max(minRows, visibleRows));
+};
+
 export function ArchivePage() {
   const [transcriptions, setTranscriptions] = useState<TranscriptionInfo[]>([]);
   const [ttsResults, setTtsResults] = useState<TTSCacheEntry[]>([]);
   const [filter, setFilter] = useState<ArchiveType>("all");
   const [query, setQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(getArchivePageSize);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +61,15 @@ export function ArchivePage() {
 
   useEffect(() => {
     loadArchive();
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setPageSize(getArchivePageSize());
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const items = useMemo<ArchiveItem[]>(() => {
@@ -78,6 +105,19 @@ export function ArchivePage() {
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
   }, [filter, query, transcriptions, ttsResults]);
+
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (safeCurrentPage - 1) * pageSize;
+  const pagedItems = items.slice(pageStartIndex, pageStartIndex + pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, query]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const handleDelete = async (item: ArchiveItem) => {
     if (!window.confirm(`Delete ${item.name}?`)) return;
@@ -118,7 +158,6 @@ export function ArchivePage() {
     <div className="archive-page">
       <section className="page-heading archive-heading">
         <div>
-          <p className="eyebrow">Deep Search Index</p>
           <h1>Archive & History</h1>
           <p>
             Access and manage historical transcription and text-to-speech
@@ -183,7 +222,7 @@ export function ArchivePage() {
               <span>Completion</span>
               <span>Actions</span>
             </div>
-            {items.map((item) => (
+            {pagedItems.map((item) => (
               <div className="archive-row" key={`${item.type}-${item.id}`}>
                 <div className="archive-name">
                   <span className="media-thumb small">
@@ -240,6 +279,36 @@ export function ArchivePage() {
                 </div>
               </div>
             ))}
+            <div className="archive-pagination">
+              <span>
+                Showing {pageStartIndex + 1}-
+                {Math.min(pageStartIndex + pagedItems.length, items.length)} of{" "}
+                {items.length}
+              </span>
+              <div className="pagination-controls" aria-label="Archive pages">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((page) => Math.max(1, page - 1))
+                  }
+                  disabled={safeCurrentPage === 1}
+                >
+                  Previous
+                </button>
+                <strong>
+                  Page {safeCurrentPage} / {totalPages}
+                </strong>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((page) => Math.min(totalPages, page + 1))
+                  }
+                  disabled={safeCurrentPage === totalPages}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </section>

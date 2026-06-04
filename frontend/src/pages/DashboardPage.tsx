@@ -94,7 +94,6 @@ export function DashboardPage() {
     <div className="dashboard-page">
       <section className="page-heading">
         <div>
-          <p className="eyebrow">AI Media Studio</p>
           <h1>Project Dashboard</h1>
           <p>Overview of your AI transcription and dubbing workflows.</p>
         </div>

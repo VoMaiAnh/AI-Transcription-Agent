@@ -484,7 +484,6 @@ export function DubbingStudioPage() {
         <section className="glass-card media-workbench">
           <div className="card-header">
             <div>
-              <p className="eyebrow">Timeline Master</p>
               <h1>Dubbing & Subtitle Studio</h1>
             </div>
             <span className="badge">
