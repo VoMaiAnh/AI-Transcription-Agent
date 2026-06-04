@@ -95,6 +95,11 @@ a {
       transparent 30rem
     ),
     var(--bg);
+  transition: grid-template-columns 0.2s ease;
+}
+
+.studio-shell.sidebar-narrow {
+  grid-template-columns: 88px minmax(0, 1fr);
 }
 
 .studio-sidebar {
@@ -107,16 +112,47 @@ a {
   padding: 24px 16px;
   background: rgba(19, 19, 20, 0.96);
   border-right: 1px solid var(--border);
+  overflow: hidden;
+  transition:
+    gap 0.2s ease,
+    padding 0.2s ease;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 10px;
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.brand-logo {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 22px rgba(255, 73, 167, 0.24));
+}
+
+.brand-copy {
+  min-width: 0;
 }
 
 .brand-title {
   max-width: 210px;
   color: #fff;
   font-family: Geist, Inter, sans-serif;
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: 0;
-  line-height: 1.15;
+  line-height: 1;
 }
 
 .brand-subtitle,
@@ -138,9 +174,43 @@ a {
 }
 
 .brand-subtitle {
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--muted-soft);
-  font-size: 13px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.sidebar-collapse-button {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-bright);
+  border-radius: 6px;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.sidebar-collapse-button:hover {
+  color: var(--primary);
+  background: rgba(192, 193, 255, 0.08);
+  border-color: rgba(192, 193, 255, 0.3);
+}
+
+.sidebar-toggle-icon {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .studio-nav {
@@ -202,10 +272,40 @@ a {
 
 .primary-action {
   justify-content: center;
+  position: relative;
   color: var(--primary-text);
   background: var(--primary);
   border-color: transparent;
   font-weight: 800;
+  text-align: center;
+}
+
+.primary-action-icon {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  color: var(--primary-text);
+  background: rgba(16, 0, 169, 0.08);
+  border: 1px solid rgba(16, 0, 169, 0.28);
+  border-radius: 999px;
+}
+
+.primary-action-plus {
+  width: 16px;
+  height: 16px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.primary-action-label {
+  min-width: 0;
+  color: inherit;
 }
 
 .primary-action:hover {
@@ -216,6 +316,47 @@ a {
 .sidebar-meta {
   color: var(--muted-soft);
   font-size: 11px;
+}
+
+.studio-shell.sidebar-narrow .studio-sidebar {
+  gap: 26px;
+  padding: 22px 12px;
+}
+
+.studio-shell.sidebar-narrow .brand-row {
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.studio-shell.sidebar-narrow .brand-block {
+  justify-content: center;
+}
+
+.studio-shell.sidebar-narrow .brand-logo {
+  width: 46px;
+  height: 46px;
+  flex-basis: 46px;
+}
+
+.studio-shell.sidebar-narrow .brand-copy,
+.studio-shell.sidebar-narrow .nav-label,
+.studio-shell.sidebar-narrow .primary-action-label,
+.studio-shell.sidebar-narrow .sidebar-meta {
+  display: none;
+}
+
+.studio-shell.sidebar-narrow .studio-nav-item,
+.studio-shell.sidebar-narrow .primary-action {
+  justify-content: center;
+  gap: 0;
+  padding: 10px;
+}
+
+.studio-shell.sidebar-narrow .primary-action-icon {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
 }
 
 .studio-workspace {
@@ -1533,6 +1674,10 @@ input[type="range"] {
     grid-template-columns: 220px minmax(0, 1fr);
   }
 
+  .studio-shell.sidebar-narrow {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+
   .studio-sidebar {
     padding: 20px 12px;
   }
@@ -1561,9 +1706,39 @@ input[type="range"] {
     display: block;
   }
 
+  .studio-shell.sidebar-narrow {
+    display: block;
+  }
+
   .studio-sidebar {
     position: static;
     height: auto;
+  }
+
+  .brand-row,
+  .studio-shell.sidebar-narrow .brand-row {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .studio-shell.sidebar-narrow .brand-block {
+    justify-content: flex-start;
+  }
+
+  .studio-shell.sidebar-narrow .brand-copy,
+  .studio-shell.sidebar-narrow .sidebar-meta {
+    display: block;
+  }
+
+  .studio-shell.sidebar-narrow .nav-label,
+  .studio-shell.sidebar-narrow .primary-action-label {
+    display: inline;
+  }
+
+  .studio-shell.sidebar-narrow .studio-nav-item,
+  .studio-shell.sidebar-narrow .primary-action {
+    justify-content: center;
+    gap: 12px;
   }
 
   .studio-nav {
