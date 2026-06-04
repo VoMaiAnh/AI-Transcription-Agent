@@ -24,7 +24,7 @@ export interface TTSModel {
   description: string;
   sample_rate: number;
   languages: string[];
-  model_family?: 'omnivoice';
+  model_family?: 'supertonic';
   supports_instructions?: boolean;
   supports_voice_presets?: boolean;
   requires_reference_audio?: boolean;
@@ -35,7 +35,7 @@ export interface TTSVoice {
   id: string;
   name: string;
   language: string;
-  model_family?: 'omnivoice' | 'all';
+  model_family?: 'supertonic' | 'all';
   description?: string;
   native_language?: string;
 }

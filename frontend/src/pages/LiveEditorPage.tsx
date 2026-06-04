@@ -12,24 +12,36 @@ import {
 
 const FALLBACK_TTS_MODELS: TTSModel[] = [
   {
-    id: 'k2-fsa/OmniVoice',
-    name: 'OmniVoice',
-    description: 'Massively multilingual zero-shot TTS model with voice design attributes.',
-    sample_rate: 24000,
-    languages: ['Auto', 'English', 'Chinese', 'Spanish', 'Arabic', 'Hindi', 'French', 'German', 'Japanese', 'Korean', 'Portuguese', 'Russian', '600+ languages'],
-    model_family: 'omnivoice',
-    supports_instructions: true,
-    supports_voice_presets: false,
+    id: 'Supertone/supertonic-3',
+    name: 'Supertonic 3',
+    description: 'Lightning-fast on-device multilingual TTS using ONNX Runtime.',
+    sample_rate: 44100,
+    languages: ['en', 'ko', 'ja', 'ar', 'bg', 'cs', 'da', 'de', 'el', 'es', 'et', 'fi', 'fr', 'hi', 'hr', 'hu', 'id', 'it', 'lt', 'lv', 'nl', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sv', 'tr', 'uk', 'vi', 'na'],
+    model_family: 'supertonic',
+    supports_instructions: false,
+    supports_voice_presets: true,
     requires_reference_audio: false,
     features: [
-      '600+ language zero-shot TTS coverage',
-      'Voice design through speaker attributes',
-      'Fine-grained non-verbal symbols and pronunciation correction',
+      '31 language codes plus unknown-language fallback',
+      'Built-in voice styles M1-M5 and F1-F5',
+      'ONNX Runtime local inference',
+      'Expression tags such as <laugh>, <breath>, and <sigh>',
     ],
   },
 ];
 
-const FALLBACK_TTS_VOICES: TTSVoice[] = [];
+const FALLBACK_TTS_VOICES: TTSVoice[] = [
+  { id: 'M1', name: 'Supertonic M1', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+  { id: 'M2', name: 'Supertonic M2', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+  { id: 'M3', name: 'Supertonic M3', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+  { id: 'M4', name: 'Supertonic M4', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+  { id: 'M5', name: 'Supertonic M5', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+  { id: 'F1', name: 'Supertonic F1', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+  { id: 'F2', name: 'Supertonic F2', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+  { id: 'F3', name: 'Supertonic F3', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+  { id: 'F4', name: 'Supertonic F4', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+  { id: 'F5', name: 'Supertonic F5', language: 'multilingual', model_family: 'supertonic', native_language: 'Multilingual' },
+];
 
 function mergeById<T extends { id: string }>(fallback: T[], remote: T[]): T[] {
   const merged = new Map<string, T>();
@@ -50,12 +62,10 @@ export function LiveEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [ttsModels, setTtsModels] = useState<TTSModel[]>(FALLBACK_TTS_MODELS);
   const [voices, setVoices] = useState<TTSVoice[]>(FALLBACK_TTS_VOICES);
-  const [ttsModel, setTtsModel] = useState('k2-fsa/OmniVoice');
-  const [voice, setVoice] = useState('Ryan');
-  const [ttsLanguage, setTtsLanguage] = useState('Auto');
-  const [instruction, setInstruction] = useState('');
+  const [ttsModel, setTtsModel] = useState('Supertone/supertonic-3');
+  const [voice, setVoice] = useState('M1');
+  const [ttsLanguage, setTtsLanguage] = useState('en');
   const [speed, setSpeed] = useState(1);
-  const [pitch, setPitch] = useState(1);
   const [synthesizing, setSynthesizing] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -68,16 +78,13 @@ export function LiveEditorPage() {
     () => ttsModels.find((item) => item.id === ttsModel),
     [ttsModel, ttsModels]
   );
-  const ttsModelFamily = selectedTtsModel?.model_family || 'omnivoice';
+  const ttsModelFamily = selectedTtsModel?.model_family || 'supertonic';
   const supportsVoicePresets = selectedTtsModel?.supports_voice_presets !== false;
-  const supportsInstructions = selectedTtsModel?.supports_instructions === true;
   const filteredVoices = useMemo(
     () =>
       voices.filter(
         (item) =>
-          !item.model_family ||
-          item.model_family === 'all' ||
-          item.model_family === ttsModelFamily
+          !item.model_family || item.model_family === 'all' || item.model_family === ttsModelFamily
       ),
     [ttsModelFamily, voices]
   );
@@ -106,8 +113,8 @@ export function LiveEditorPage() {
         if (!mounted) return;
         setTtsModels(mergeById(FALLBACK_TTS_MODELS, modelsData.models));
         setVoices(mergeById(FALLBACK_TTS_VOICES, voicesData.voices));
-        setTtsModel(modelsData.default_model || 'k2-fsa/OmniVoice');
-        setVoice(voicesData.default_voice || 'Ryan');
+        setTtsModel(modelsData.default_model || 'Supertone/supertonic-3');
+        setVoice(voicesData.default_voice || 'M1');
       } catch {
         if (!mounted) return;
         setTtsModels(FALLBACK_TTS_MODELS);
@@ -179,6 +186,12 @@ export function LiveEditorPage() {
       URL.revokeObjectURL(nextMediaUrl);
     };
   }, [file]);
+
+  useEffect(() => {
+    if (selectedTtsModel?.languages?.[0]) {
+      setTtsLanguage(selectedTtsModel.languages[0]);
+    }
+  }, [selectedTtsModel]);
 
   useEffect(() => {
     if (!supportsVoicePresets) {
@@ -270,9 +283,9 @@ export function LiveEditorPage() {
         model: ttsModel,
         voice: supportsVoicePresets ? voice : '',
         speed,
-        pitch,
-        language: ttsLanguage === 'Auto' ? null : ttsLanguage,
-        instruction,
+        pitch: 1,
+        language: ttsLanguage,
+        instruction: null,
         output_format: 'wav',
       });
       if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -517,26 +530,10 @@ export function LiveEditorPage() {
             <label>
               Output Language
               <select value={ttsLanguage} onChange={(event) => setTtsLanguage(event.target.value)}>
-                {(selectedTtsModel?.languages || ['Auto', 'Chinese', 'English']).map((item) => (
+                {(selectedTtsModel?.languages || ['EN']).map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
-            </label>
-            <label>
-              {ttsModelFamily === 'omnivoice' ? 'Voice Design' : 'Instruction Prompt'}
-              <textarea
-                value={instruction}
-                onChange={(event) => setInstruction(event.target.value)}
-                disabled={!supportsInstructions}
-                placeholder={
-                  supportsInstructions
-                    ? ttsModelFamily === 'omnivoice'
-                      ? 'female, young adult, low pitch, british accent'
-                      : 'Speak in a very happy tone'
-                    : 'Instruction prompts are not supported by this model'
-                }
-                rows={3}
-              />
             </label>
           </div>
           {selectedTtsModel && (
@@ -552,11 +549,7 @@ export function LiveEditorPage() {
           )}
           <label className="range-control">
             <span>Dubbing Speed <strong>{speed.toFixed(2)}x</strong></span>
-            <input min="0.5" max="2" step="0.05" type="range" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
-          </label>
-          <label className="range-control">
-            <span>Pitch Modulation <strong>{pitch.toFixed(2)}x</strong></span>
-            <input min="0.5" max="2" step="0.05" type="range" value={pitch} onChange={(event) => setPitch(Number(event.target.value))} />
+            <input min="0.7" max="2" step="0.05" type="range" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
           </label>
           <button className="studio-button lime" type="button" onClick={handleSynthesize} disabled={synthesizing || !result}>
             {synthesizing ? 'Synthesizing' : 'Run Dubbing Pass'}

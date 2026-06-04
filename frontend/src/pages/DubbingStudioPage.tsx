@@ -9,6 +9,41 @@ import {
   validateMediaFile,
 } from './pageUtils';
 
+const SUPERTONIC_MODEL = { id: 'Supertone/supertonic-3', name: 'Supertonic 3' };
+
+const SUPERTONIC_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'it', label: 'Italian' },
+  { code: 'nl', label: 'Dutch' },
+  { code: 'pl', label: 'Polish' },
+  { code: 'tr', label: 'Turkish' },
+  { code: 'uk', label: 'Ukrainian' },
+  { code: 'vi', label: 'Vietnamese' },
+  { code: 'na', label: 'Unknown / fallback' },
+];
+
+const SUPERTONIC_VOICES = [
+  { id: 'M1', name: 'Supertonic M1' },
+  { id: 'M2', name: 'Supertonic M2' },
+  { id: 'M3', name: 'Supertonic M3' },
+  { id: 'M4', name: 'Supertonic M4' },
+  { id: 'M5', name: 'Supertonic M5' },
+  { id: 'F1', name: 'Supertonic F1' },
+  { id: 'F2', name: 'Supertonic F2' },
+  { id: 'F3', name: 'Supertonic F3' },
+  { id: 'F4', name: 'Supertonic F4' },
+  { id: 'F5', name: 'Supertonic F5' },
+];
+
 export function DubbingStudioPage() {
   const [file, setFile] = useState<File | null>(null);
   const [language, setLanguage] = useState('');
@@ -20,10 +55,9 @@ export function DubbingStudioPage() {
   const [subtitleFormat, setSubtitleFormat] = useState<'srt' | 'vtt'>('srt');
   const [preview, setPreview] = useState<string | null>(null);
   const [targetLanguage, setTargetLanguage] = useState('en');
-  const [voice, setVoice] = useState('voice-design');
-  const [ttsModel, setTtsModel] = useState('k2-fsa/OmniVoice');
+  const [voice, setVoice] = useState('M1');
+  const [ttsModel, setTtsModel] = useState(SUPERTONIC_MODEL.id);
   const [speed, setSpeed] = useState(1);
-  const [pitch, setPitch] = useState(1);
   const [originalVolume, setOriginalVolume] = useState(0.15);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,7 +149,7 @@ export function DubbingStudioPage() {
         tts_model: ttsModel,
         voice,
         speed,
-        pitch,
+        pitch: 1,
         original_volume: originalVolume,
         whisper_model: subtitleModel,
       });
@@ -135,18 +169,18 @@ export function DubbingStudioPage() {
       <aside className="glass-card voice-library">
         <h2>Voice Library</h2>
         <div className="model-note">
-          <strong>OmniVoice</strong>
-          <span>Voice design with speaker attributes for multilingual dubbing.</span>
+          <strong>Supertonic 3</strong>
+          <span>Built-in voice styles for fast on-device dubbing.</span>
         </div>
-        {['female, young adult', 'male, low pitch', 'whisper', 'british accent'].map((item) => (
+        {SUPERTONIC_VOICES.map((item) => (
           <button
-            key={item}
-            className={`voice-card ${voice === item ? 'active' : ''}`}
+            key={item.id}
+            className={`voice-card ${voice === item.id ? 'active' : ''}`}
             type="button"
-            onClick={() => setVoice(item)}
+            onClick={() => setVoice(item.id)}
           >
-            <span className="avatar-token">{item.slice(0, 2).toUpperCase()}</span>
-            <span>{item}</span>
+            <span className="avatar-token">{item.id}</span>
+            <span>{item.name}</span>
           </button>
         ))}
       </aside>
@@ -269,27 +303,28 @@ export function DubbingStudioPage() {
           <label>
             Target Language
             <select value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value)}>
-              <option value="en">English (US)</option>
-              <option value="es">Spanish (ES)</option>
-              <option value="fr">French</option>
-              <option value="de">German</option>
-              <option value="zh">Mandarin</option>
-              <option value="ja">Japanese</option>
+              {SUPERTONIC_LANGUAGES.map((item) => (
+                <option key={item.code} value={item.code}>{item.label}</option>
+              ))}
             </select>
           </label>
           <label>
             TTS Model
             <select value={ttsModel} onChange={(event) => setTtsModel(event.target.value)}>
-              <option value="k2-fsa/OmniVoice">OmniVoice</option>
+              <option value={SUPERTONIC_MODEL.id}>{SUPERTONIC_MODEL.name}</option>
+            </select>
+          </label>
+          <label>
+            Voice
+            <select value={voice} onChange={(event) => setVoice(event.target.value)}>
+              {SUPERTONIC_VOICES.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
             </select>
           </label>
           <label className="range-control">
             <span>Speed <strong>{speed.toFixed(2)}x</strong></span>
-            <input min="0.5" max="2" step="0.05" type="range" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
-          </label>
-          <label className="range-control">
-            <span>Pitch <strong>{pitch.toFixed(2)}x</strong></span>
-            <input min="0.5" max="2" step="0.05" type="range" value={pitch} onChange={(event) => setPitch(Number(event.target.value))} />
+            <input min="0.7" max="2" step="0.05" type="range" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
           </label>
           <label className="range-control">
             <span>Original Volume <strong>{Math.round(originalVolume * 100)}%</strong></span>

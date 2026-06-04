@@ -1,31 +1,87 @@
 /**
  * Text-to-Speech Page
  */
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import * as api from '../api/client';
 import { TTSVoice } from '../types';
 
+const SUPERTONIC_MODEL = { id: 'Supertone/supertonic-3', name: 'Supertonic 3' };
+
+const SUPERTONIC_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'bg', label: 'Bulgarian' },
+  { code: 'cs', label: 'Czech' },
+  { code: 'da', label: 'Danish' },
+  { code: 'el', label: 'Greek' },
+  { code: 'et', label: 'Estonian' },
+  { code: 'fi', label: 'Finnish' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'hr', label: 'Croatian' },
+  { code: 'hu', label: 'Hungarian' },
+  { code: 'id', label: 'Indonesian' },
+  { code: 'it', label: 'Italian' },
+  { code: 'lt', label: 'Lithuanian' },
+  { code: 'lv', label: 'Latvian' },
+  { code: 'nl', label: 'Dutch' },
+  { code: 'pl', label: 'Polish' },
+  { code: 'ro', label: 'Romanian' },
+  { code: 'sk', label: 'Slovak' },
+  { code: 'sl', label: 'Slovenian' },
+  { code: 'sv', label: 'Swedish' },
+  { code: 'tr', label: 'Turkish' },
+  { code: 'uk', label: 'Ukrainian' },
+  { code: 'vi', label: 'Vietnamese' },
+  { code: 'na', label: 'Unknown / fallback' },
+];
+
+const FALLBACK_VOICES: TTSVoice[] = [
+  { id: 'M1', name: 'Supertonic M1', language: 'multilingual', model_family: 'supertonic' },
+  { id: 'M2', name: 'Supertonic M2', language: 'multilingual', model_family: 'supertonic' },
+  { id: 'M3', name: 'Supertonic M3', language: 'multilingual', model_family: 'supertonic' },
+  { id: 'M4', name: 'Supertonic M4', language: 'multilingual', model_family: 'supertonic' },
+  { id: 'M5', name: 'Supertonic M5', language: 'multilingual', model_family: 'supertonic' },
+  { id: 'F1', name: 'Supertonic F1', language: 'multilingual', model_family: 'supertonic' },
+  { id: 'F2', name: 'Supertonic F2', language: 'multilingual', model_family: 'supertonic' },
+  { id: 'F3', name: 'Supertonic F3', language: 'multilingual', model_family: 'supertonic' },
+  { id: 'F4', name: 'Supertonic F4', language: 'multilingual', model_family: 'supertonic' },
+  { id: 'F5', name: 'Supertonic F5', language: 'multilingual', model_family: 'supertonic' },
+];
+
 export function TTSPage() {
   const [text, setText] = useState('');
-  const [model, setModel] = useState('k2-fsa/OmniVoice');
-  const [voice, setVoice] = useState('Ryan');
+  const [model, setModel] = useState(SUPERTONIC_MODEL.id);
+  const [voice, setVoice] = useState('M1');
   const [speed, setSpeed] = useState(1.0);
-  const [pitch, setPitch] = useState(1.0);
-  const [language, setLanguage] = useState('');
-  const [instruction, setInstruction] = useState('');
+  const [language, setLanguage] = useState('en');
   const [outputFormat, setOutputFormat] = useState<'wav' | 'mp3'>('wav');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
 
-  const [availableVoices, setAvailableVoices] = useState<TTSVoice[]>([]);
+  const [availableVoices, setAvailableVoices] = useState<TTSVoice[]>(FALLBACK_VOICES);
 
   useEffect(() => {
     api.getTTSVoices()
       .then((res) => setAvailableVoices(res.voices))
-      .catch(console.error);
+      .catch(() => setAvailableVoices(FALLBACK_VOICES));
   }, []);
+
+  const filteredVoices = useMemo(() => availableVoices, [availableVoices]);
+
+  useEffect(() => {
+    if (!filteredVoices.some((item) => item.id === voice)) {
+      setVoice(filteredVoices[0]?.id || 'M1');
+    }
+  }, [filteredVoices, voice]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,9 +99,9 @@ export function TTSPage() {
         model,
         voice,
         speed,
-        pitch,
-        language: language || null,
-        instruction,
+        pitch: 1,
+        language,
+        instruction: null,
         output_format: outputFormat,
       });
 
@@ -100,8 +156,8 @@ export function TTSPage() {
                 onChange={(e) => setModel(e.target.value)}
                 disabled={loading}
               >
-                <optgroup label="OmniVoice Models">
-                  <option value="k2-fsa/OmniVoice">OmniVoice</option>
+                <optgroup label="Supertonic Models">
+                  <option value={SUPERTONIC_MODEL.id}>{SUPERTONIC_MODEL.name}</option>
                 </optgroup>
               </select>
             </div>
@@ -114,7 +170,7 @@ export function TTSPage() {
                 onChange={(e) => setVoice(e.target.value)}
                 disabled={loading}
               >
-                {availableVoices.map((v) => (
+                {filteredVoices.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name} ({v.language})
                   </option>
@@ -127,14 +183,14 @@ export function TTSPage() {
               <select
                 id="language"
                 value={language}
-                onChange={(e) => setLanguage(e.target.value)}
+                onChange={(e) => {
+                  setLanguage(e.target.value);
+                }}
                 disabled={loading}
               >
-                <option value="">Auto-detect</option>
-                <option value="English">English</option>
-                <option value="Chinese">Chinese</option>
-                <option value="Japanese">Japanese</option>
-                <option value="Korean">Korean</option>
+                {SUPERTONIC_LANGUAGES.map((item) => (
+                  <option key={item.code} value={item.code}>{item.label}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -144,7 +200,7 @@ export function TTSPage() {
               <label>Speed: {speed.toFixed(1)}x</label>
               <input
                 type="range"
-                min="0.5"
+                min="0.7"
                 max="2.0"
                 step="0.1"
                 value={speed}
@@ -152,25 +208,8 @@ export function TTSPage() {
                 disabled={loading}
               />
               <div className="range-labels">
-                <span>0.5x</span>
+                <span>0.7x</span>
                 <span>2.0x</span>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Pitch: {pitch.toFixed(1)}</label>
-              <input
-                type="range"
-                min="0.5"
-                max="2.0"
-                step="0.1"
-                value={pitch}
-                onChange={(e) => setPitch(parseFloat(e.target.value))}
-                disabled={loading}
-              />
-              <div className="range-labels">
-                <span>Low</span>
-                <span>High</span>
               </div>
             </div>
 
@@ -186,18 +225,6 @@ export function TTSPage() {
                 <option value="mp3">MP3 (Compressed)</option>
               </select>
             </div>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="instruction">Instruction / Voice Design</label>
-            <textarea
-              id="instruction"
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              placeholder="female, young adult, low pitch, british accent"
-              disabled={loading}
-              rows={3}
-            />
           </div>
 
           {error && (
@@ -247,15 +274,11 @@ export function TTSPage() {
       <div className="info-cards">
         <div className="info-card">
           <h4>Voice Options</h4>
-          <p>Multiple voices with different tones</p>
+          <p>Built-in Supertonic voice styles</p>
         </div>
         <div className="info-card">
           <h4>Speed Control</h4>
-          <p>Adjust playback speed (0.5x - 2.0x)</p>
-        </div>
-        <div className="info-card">
-          <h4>Pitch Control</h4>
-          <p>Modify voice pitch</p>
+          <p>Adjust playback speed (0.7x - 2.0x)</p>
         </div>
       </div>
     </div>

@@ -14,8 +14,8 @@ import {
 } from '../types';
 
 const API_BASE = '/api/v1';
-const DEFAULT_TTS_MODEL = 'k2-fsa/OmniVoice';
-const DEFAULT_TTS_VOICE = 'Ryan';
+const DEFAULT_TTS_MODEL = 'Supertone/supertonic-3';
+const DEFAULT_TTS_VOICE = 'M1';
 
 /**
  * Handle API response and throw error if not ok

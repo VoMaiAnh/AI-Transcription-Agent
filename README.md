@@ -1,6 +1,6 @@
 ﻿# AI Transcription & TTS Agent
 
-An AI-powered audio/video transcription and text-to-speech application using Whisper, Parakeet TDT, and OmniVoice. This tool converts audio and video files into accurate text transcriptions and can synthesize designed voices from text.
+An AI-powered audio/video transcription and text-to-speech application using Whisper, Parakeet TDT, and Supertonic 3. This tool converts audio and video files into accurate text transcriptions and can synthesize on-device preset voices from text.
 <img width="1908" height="906" alt="Captura de pantalla 2026-03-03 232938" src="https://github.com/user-attachments/assets/f9f842a5-097c-40cc-95ad-856908daa4c9" />
 
 ## Features
@@ -13,9 +13,9 @@ An AI-powered audio/video transcription and text-to-speech application using Whi
 - **Subtitle generation** in SRT and VTT formats
 
 ### Text-to-Speech (TTS)
-- **OmniVoice** for multilingual voice design
-- **Voice design attributes** such as gender, age, pitch, accent, dialect, and whisper
-- **Speed and pitch control** for customized output
+- **Supertonic 3** for ONNX Runtime on-device multilingual speech synthesis
+- **Built-in voice styles** M1-M5 and F1-F5 across 31 supported language codes
+- **Speed control** for customized output
 
 ### Web Interface
 - **Modern React frontend** with Vite for fast development
@@ -87,7 +87,7 @@ AI-Transcription-Agent/
 
 Before running this project, ensure you have:
 
-- **Python 3.10+** (including Python 3.12+)
+- **Python 3.10+**
 - **FFmpeg** (Required for audio processing)
 - **Git** (For cloning the repository)
 - **Node.js 18+** (For frontend development)
@@ -187,7 +187,7 @@ WHISPER_MODEL=base
 PARAKEET_MODEL=nvidia/parakeet-tdt-0.6b-v3
 
 # TTS Model Configuration
-TTS_MODEL=k2-fsa/OmniVoice
+TTS_MODEL=Supertone/supertonic-3
 
 # Application settings
 MAX_FILE_SIZE=52428800
@@ -272,8 +272,10 @@ curl -X POST http://localhost:8000/api/v1/transcribe \
 ```bash
 curl -X POST http://localhost:8000/api/v1/tts/synthesize \
   -F "text=Hello, this is a test." \
-  -F "model=k2-fsa/OmniVoice" \
-  -F "instruction=female, young adult, low pitch, british accent" \
+  -F "model=Supertone/supertonic-3" \
+  -F "voice=M1" \
+  -F "language=en" \
+  -F "speed=1.0" \
   -o output.wav
 ```
 
@@ -403,7 +405,7 @@ Look for the folder starting with `Gyan.FFmpeg` and navigate to the `bin` subfol
 ## Key Dependencies
 
 - **openai-whisper** - OpenAI's Whisper model for speech recognition
-- **omnivoice** - OmniVoice TTS and voice design
+- **supertonic** - ONNX Runtime on-device multilingual text-to-speech
 - **pydub** - Audio manipulation and processing
 - **pydantic-settings** - Configuration management
 - **FFmpeg** - Backend for audio/video processing
@@ -427,7 +429,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Acknowledgments
 
 - [OpenAI Whisper](https://github.com/openai/whisper) for the powerful transcription model
-- [OmniVoice](https://github.com/k2-fsa/OmniVoice) for multilingual TTS and voice design
+- [Supertonic 3](https://github.com/supertone-inc/supertonic) for on-device multilingual TTS
 - [pydub](https://github.com/jiaaro/pydub) for audio processing capabilities
 - [FFmpeg](https://ffmpeg.org/) for multimedia framework
 

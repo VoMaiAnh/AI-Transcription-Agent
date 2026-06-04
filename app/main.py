@@ -3,7 +3,7 @@ FastAPI Application Entry Point
 
 AI Transcription & TTS API
 - STT: Whisper and Parakeet TDT models for speech-to-text
-- TTS: OmniVoice for text-to-speech and voice design
+- TTS: Supertonic 3 for on-device text-to-speech
 
 python -X utf8 -m app.main
 """
@@ -42,9 +42,11 @@ def create_app() -> FastAPI:
   - CPU-optimized with ONNX Runtime
 
 ### Text-to-Speech (TTS)
-- **OmniVoice models**: k2-fsa/OmniVoice
-  - 600+ language zero-shot coverage
-  - Voice design with speaker attributes such as gender, age, pitch, accent, dialect, and whisper
+- **Supertonic 3**: Supertone/supertonic-3
+  - ONNX Runtime local inference
+  - 31 supported language codes plus unknown-language fallback
+  - Built-in voice styles M1-M5 and F1-F5
+  - Speed control for synthesis and first-pass dubbing
 
 ### Subtitle Generation
 - Generate SRT and VTT subtitle files from transcriptions

@@ -43,7 +43,7 @@ function Sidebar() {
           <span className="nav-glyph">+</span>
           New Project
         </NavLink>
-        <div className="sidebar-meta">Powered by Whisper, Parakeet TDT, and OmniVoice.</div>
+        <div className="sidebar-meta">Powered by Whisper, Parakeet TDT, and Supertonic 3.</div>
       </div>
     </aside>
   );

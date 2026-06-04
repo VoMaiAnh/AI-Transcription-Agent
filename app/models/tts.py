@@ -14,7 +14,7 @@ class TTSModelInfo(BaseModel):
     description: str
     sample_rate: int
     languages: list[str]
-    model_family: str = "omnivoice"
+    model_family: str = "supertonic"
     supports_instructions: bool = False
     supports_voice_presets: bool = True
     requires_reference_audio: bool = False
@@ -32,7 +32,7 @@ class TTSVoiceInfo(BaseModel):
     id: str
     name: str
     language: str
-    model_family: str = "omnivoice"
+    model_family: str = "supertonic"
     description: str = ""
     native_language: str = ""
 
@@ -46,9 +46,9 @@ class TTSVoicesResponse(BaseModel):
 class TTSRequest(BaseModel):
     """Request for TTS synthesis"""
     text: str = Field(..., min_length=1, max_length=5000)
-    model: str = "k2-fsa/OmniVoice"
-    voice: str = "voice-design"
-    speed: float = Field(1.0, ge=0.5, le=2.0)
+    model: str = "Supertone/supertonic-3"
+    voice: str = "M1"
+    speed: float = Field(1.0, ge=0.7, le=2.0)
     pitch: float = Field(1.0, ge=0.5, le=2.0)
     language: Optional[str] = None
     instruction: Optional[str] = None

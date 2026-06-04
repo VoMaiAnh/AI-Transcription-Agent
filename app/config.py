@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     PARAKEET_MODEL: str = "nvidia/parakeet-tdt-0.6b-v3"
 
     # TTS Model settings
-    TTS_MODEL: str = "k2-fsa/OmniVoice"
+    TTS_MODEL: str = "Supertone/supertonic-3"
 
     # Device settings
     DEVICE: str = "cpu"  # Will be overridden by torch.cuda.is_available()

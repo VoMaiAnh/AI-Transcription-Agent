@@ -224,9 +224,9 @@ async def dub_video(
     transcription_id: str,
     target_language: Optional[str] = Form(None, description="Optional target language. Use 'en' for Whisper translation."),
     tts_model: str = Form(DEFAULT_TTS_MODEL, description="TTS model to use"),
-    voice: str = Form(DEFAULT_TTS_VOICE, description="Ignored for OmniVoice voice-design mode"),
-    speed: float = Form(1.0, description="Speech speed (0.5-2.0)"),
-    pitch: float = Form(1.0, description="Pitch adjustment (0.5-2.0)"),
+    voice: str = Form(DEFAULT_TTS_VOICE, description="Supertonic voice preset: M1-M5 or F1-F5"),
+    speed: float = Form(1.0, description="Speech speed (0.7-2.0)"),
+    pitch: float = Form(1.0, description="Accepted for compatibility; ignored by Supertonic"),
     original_volume: float = Form(0.15, description="Original audio bed volume from 0.0 to 1.0"),
     whisper_model: str = Form("whisper-base", description="Whisper model for optional English translation"),
 ):
