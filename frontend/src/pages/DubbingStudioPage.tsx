@@ -1,258 +1,525 @@
-import { FormEvent, useRef, useState } from 'react';
-import * as api from '../api/client';
-import { TranscriptionResponse } from '../types';
-import {
-  ALLOWED_MEDIA_EXTENSIONS,
-  downloadBlob,
-  formatFileSize,
-  formatTime,
-  validateMediaFile,
-} from './pageUtils';
+import { useEffect, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import * as api from "../api/client";
+import { TranscriptionInfo } from "../types";
+import { downloadBlob, formatDate, formatTime } from "./pageUtils";
 
-const SUPERTONIC_MODEL = { id: 'Supertone/supertonic-3', name: 'Supertonic 3' };
+const SUPERTONIC_MODEL = { id: "Supertone/supertonic-3", name: "Supertonic 3" };
 
 const SUPERTONIC_LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'es', label: 'Spanish' },
-  { code: 'fr', label: 'French' },
-  { code: 'de', label: 'German' },
-  { code: 'ja', label: 'Japanese' },
-  { code: 'ko', label: 'Korean' },
-  { code: 'pt', label: 'Portuguese' },
-  { code: 'ru', label: 'Russian' },
-  { code: 'ar', label: 'Arabic' },
-  { code: 'hi', label: 'Hindi' },
-  { code: 'it', label: 'Italian' },
-  { code: 'nl', label: 'Dutch' },
-  { code: 'pl', label: 'Polish' },
-  { code: 'tr', label: 'Turkish' },
-  { code: 'uk', label: 'Ukrainian' },
-  { code: 'vi', label: 'Vietnamese' },
-  { code: 'na', label: 'Unknown / fallback' },
+  { code: "en", label: "English" },
+  { code: "es", label: "Spanish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "pt", label: "Portuguese" },
+  { code: "ru", label: "Russian" },
+  { code: "ar", label: "Arabic" },
+  { code: "hi", label: "Hindi" },
+  { code: "it", label: "Italian" },
+  { code: "nl", label: "Dutch" },
+  { code: "pl", label: "Polish" },
+  { code: "tr", label: "Turkish" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "vi", label: "Vietnamese" },
+  { code: "na", label: "Unknown / fallback" },
 ];
 
 const SUPERTONIC_VOICES = [
-  { id: 'M1', name: 'Supertonic M1' },
-  { id: 'M2', name: 'Supertonic M2' },
-  { id: 'M3', name: 'Supertonic M3' },
-  { id: 'M4', name: 'Supertonic M4' },
-  { id: 'M5', name: 'Supertonic M5' },
-  { id: 'F1', name: 'Supertonic F1' },
-  { id: 'F2', name: 'Supertonic F2' },
-  { id: 'F3', name: 'Supertonic F3' },
-  { id: 'F4', name: 'Supertonic F4' },
-  { id: 'F5', name: 'Supertonic F5' },
+  { id: "M1", name: "Supertonic M1" },
+  { id: "M2", name: "Supertonic M2" },
+  { id: "M3", name: "Supertonic M3" },
+  { id: "M4", name: "Supertonic M4" },
+  { id: "M5", name: "Supertonic M5" },
+  { id: "F1", name: "Supertonic F1" },
+  { id: "F2", name: "Supertonic F2" },
+  { id: "F3", name: "Supertonic F3" },
+  { id: "F4", name: "Supertonic F4" },
+  { id: "F5", name: "Supertonic F5" },
 ];
 
+type RenderAction = "soft" | "hard" | "dub";
+
+function chooseRenderedMediaKey(
+  mediaPaths?: Record<string, string>,
+): string | null {
+  const keys = Object.keys(mediaPaths || {});
+  if (keys.length === 0) return null;
+
+  return (
+    keys.find((key) => key.startsWith("dubbed_")) ||
+    keys.find(
+      (key) =>
+        key.includes("subtitles_hard") || key.includes("subtitles_burned"),
+    ) ||
+    keys.find((key) => key.includes("subtitles_soft")) ||
+    keys.find((key) => key.includes("subtitles")) ||
+    keys[0]
+  );
+}
+
 export function DubbingStudioPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [language, setLanguage] = useState('');
-  const [subtitleModel, setSubtitleModel] = useState('parakeet-tdt-0.6b');
-  const [result, setResult] = useState<TranscriptionResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { transcriptionId } = useParams();
+  const [projects, setProjects] = useState<TranscriptionInfo[]>([]);
+  const [project, setProject] = useState<TranscriptionInfo | null>(null);
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
+  const [renderedUrl, setRenderedUrl] = useState<string | null>(null);
+  const [renderedLabel, setRenderedLabel] = useState("Rendered output");
+  const [renderedDownload, setRenderedDownload] = useState<{
+    blob: Blob;
+    filename: string;
+  } | null>(null);
+  const [lastRenderAction, setLastRenderAction] = useState<RenderAction | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
   const [mediaLoading, setMediaLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [subtitleFormat, setSubtitleFormat] = useState<'srt' | 'vtt'>('srt');
+  const [subtitleFormat, setSubtitleFormat] = useState<"srt" | "vtt">("srt");
   const [preview, setPreview] = useState<string | null>(null);
-  const [targetLanguage, setTargetLanguage] = useState('en');
-  const [voice, setVoice] = useState('M1');
+  const [targetLanguage, setTargetLanguage] = useState("en");
+  const [voice, setVoice] = useState("M1");
   const [ttsModel, setTtsModel] = useState(SUPERTONIC_MODEL.id);
   const [speed, setSpeed] = useState(1);
   const [originalVolume, setOriginalVolume] = useState(0.15);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [enableSubtitles, setEnableSubtitles] = useState(true);
+  const [enableDubbing, setEnableDubbing] = useState(true);
+  const [replaceOriginalAudio, setReplaceOriginalAudio] = useState(false);
+  const blobUrlRef = useRef<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (!selectedFile) return;
-
-    const validationError = validateMediaFile(selectedFile);
-    if (validationError) {
-      setError(validationError);
-      return;
+  const clearBlobPreview = () => {
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
     }
-
-    setFile(selectedFile);
-    setError(null);
   };
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!file) {
-      setError('Please select a media file before opening the dubbing timeline.');
-      return;
-    }
-
+  const loadProject = async (id: string) => {
     setLoading(true);
     setError(null);
     setPreview(null);
+    setRenderedDownload(null);
+    setLastRenderAction(null);
+    clearBlobPreview();
 
     try {
-      const response = await api.transcribeFile(file, {
-        language: language || undefined,
-        model: subtitleModel,
-      });
-      setResult(response);
+      const item = await api.getTranscription(id);
+      setProject(item);
+      setSourceUrl(api.getTranscriptionSourceUrl(item.id));
+
+      const mediaKey = chooseRenderedMediaKey(item.media_paths);
+      if (mediaKey) {
+        setRenderedUrl(api.getTranscriptionMediaUrl(item.id, mediaKey));
+        setRenderedLabel(mediaKey.replace(/_/g, " "));
+      } else {
+        setRenderedUrl(null);
+        setRenderedLabel("Rendered output");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to prepare dubbing timeline');
+      setProject(null);
+      setSourceUrl(null);
+      setRenderedUrl(null);
+      setError(err instanceof Error ? err.message : "Failed to load project");
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadProjects() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data = await api.listTranscriptions();
+        if (!mounted) return;
+        const sorted = [...data.transcriptions].sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+        setProjects(sorted);
+
+        const initialId =
+          transcriptionId ||
+          sorted.find((item) => item.is_video)?.id ||
+          sorted[0]?.id;
+        if (initialId) {
+          await loadProject(initialId);
+        } else {
+          setProject(null);
+          setSourceUrl(null);
+          setRenderedUrl(null);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (!mounted) return;
+        setError(
+          err instanceof Error ? err.message : "Failed to load earlier work",
+        );
+        setLoading(false);
+      }
+    }
+
+    loadProjects();
+    return () => {
+      mounted = false;
+      clearBlobPreview();
+    };
+  }, [transcriptionId]);
+
+  const segments = project?.result.segments || [];
+  const canExportVideo = Boolean(project?.is_video && segments.length > 0);
+  const renderedMediaKeys = Object.keys(project?.media_paths || {});
+  const effectiveOriginalVolume = replaceOriginalAudio ? 0 : originalVolume;
+
   const handlePreview = async () => {
-    if (!result) return;
+    if (!project) return;
     try {
-      const { content } = await api.downloadSubtitle(result.transcription_id, subtitleFormat);
+      const { content } = await api.downloadSubtitle(
+        project.id,
+        subtitleFormat,
+      );
       setPreview(content);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load subtitle preview');
+      setError(
+        err instanceof Error ? err.message : "Failed to load subtitle preview",
+      );
     }
   };
 
   const handleDownloadSubtitle = async () => {
-    if (!result) return;
+    if (!project) return;
     try {
-      const { content, filename, mediaType } = await api.downloadSubtitle(result.transcription_id, subtitleFormat);
+      const { content, filename, mediaType } = await api.downloadSubtitle(
+        project.id,
+        subtitleFormat,
+      );
       downloadBlob(new Blob([content], { type: mediaType }), filename);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download subtitle track');
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to download subtitle track",
+      );
     }
   };
 
-  const handleEmbedVideo = async (mode: 'soft' | 'hard') => {
-    if (!result) return;
+  const setRenderedBlob = (blob: Blob, filename: string, label: string) => {
+    clearBlobPreview();
+    const nextUrl = URL.createObjectURL(blob);
+    blobUrlRef.current = nextUrl;
+    setRenderedUrl(nextUrl);
+    setRenderedLabel(label);
+    setRenderedDownload({ blob, filename });
+  };
+
+  const handleEmbedVideo = async (mode: "soft" | "hard") => {
+    if (!project) return;
     setMediaLoading(mode);
     setError(null);
 
     try {
-      const { blob, filename } = await api.embedSubtitleVideo(result.transcription_id, {
+      const { blob, filename } = await api.embedSubtitleVideo(project.id, {
         mode,
         format: subtitleFormat,
       });
-      downloadBlob(blob, filename);
+      setRenderedBlob(
+        blob,
+        filename,
+        mode === "hard"
+          ? "Hard-burned subtitle render"
+          : "Soft subtitle render",
+      );
+      setLastRenderAction(mode);
+      const refreshed = await api.getTranscription(project.id);
+      setProject(refreshed);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to render subtitled video');
+      setError(
+        err instanceof Error ? err.message : "Failed to render subtitled video",
+      );
     } finally {
       setMediaLoading(null);
     }
   };
 
   const handleDubVideo = async () => {
-    if (!result) return;
-    setMediaLoading('dub');
+    if (!project) return;
+    setMediaLoading("dub");
     setError(null);
 
     try {
-      const { blob, filename } = await api.dubVideo(result.transcription_id, {
+      const { blob, filename } = await api.dubVideo(project.id, {
         target_language: targetLanguage,
         tts_model: ttsModel,
         voice,
         speed,
         pitch: 1,
-        original_volume: originalVolume,
-        whisper_model: subtitleModel,
+        original_volume: effectiveOriginalVolume,
+        whisper_model: "whisper-base",
       });
-      downloadBlob(blob, filename);
+      setRenderedBlob(blob, filename, "Final dubbed render");
+      setLastRenderAction("dub");
+      const refreshed = await api.getTranscription(project.id);
+      setProject(refreshed);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to render final dub');
+      setError(
+        err instanceof Error ? err.message : "Failed to render final dub",
+      );
     } finally {
       setMediaLoading(null);
     }
   };
 
-  const segments = result?.segments || [];
-  const canExportVideo = Boolean(result?.is_video && segments.length > 0);
+  const handleRenderedArtifactSelect = (mediaKey: string) => {
+    if (!project) return;
+    clearBlobPreview();
+    setRenderedDownload(null);
+    setLastRenderAction(null);
+    setRenderedUrl(api.getTranscriptionMediaUrl(project.id, mediaKey));
+    setRenderedLabel(mediaKey.replace(/_/g, " "));
+  };
+
+  const handleRenderedDownload = async () => {
+    if (renderedDownload) {
+      downloadBlob(renderedDownload.blob, renderedDownload.filename);
+      return;
+    }
+
+    if (!renderedUrl || !project) return;
+    try {
+      const response = await fetch(renderedUrl);
+      if (!response.ok) throw new Error("Failed to download rendered media");
+      const blob = await response.blob();
+      const extension = blob.type.includes("matroska") ? "mkv" : "mp4";
+      const safeLabel =
+        renderedLabel
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "") || "render";
+      downloadBlob(blob, `${project.id}_${safeLabel}.${extension}`);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to download final result",
+      );
+    }
+  };
+
+  const handleRedoRender = async () => {
+    if (!lastRenderAction) return;
+    if (lastRenderAction === "dub") {
+      await handleDubVideo();
+    } else {
+      await handleEmbedVideo(lastRenderAction);
+    }
+  };
 
   return (
-    <div className="studio-grid dubbing-grid">
-      <aside className="glass-card voice-library">
-        <h2>Voice Library</h2>
+    <div
+      className={`studio-grid dubbing-grid ${sidebarOpen ? "" : "sidebar-collapsed"}`}
+    >
+      <button
+        className="studio-button ghost sidebar-toggle"
+        type="button"
+        onClick={() => setSidebarOpen((current) => !current)}
+      >
+        {sidebarOpen ? "Hide Library" : "Show Library"}
+      </button>
+
+      <aside
+        className={`glass-card voice-library ${sidebarOpen ? "" : "hidden"}`}
+      >
+        <h2>Project Library</h2>
+        <div className="model-note">
+          <strong>{projects.length} saved jobs</strong>
+          <span>Open transcription work created in Live Editor.</span>
+        </div>
+        {projects.length === 0 ? (
+          <div className="empty-panel small">
+            <span>No saved transcriptions yet.</span>
+            <Link className="archive-link-button" to="/editor">
+              Open Live Editor
+            </Link>
+          </div>
+        ) : (
+          <div className="project-library-list">
+            {projects.map((item) => (
+              <button
+                key={item.id}
+                className={`library-project-button ${project?.id === item.id ? "active" : ""}`}
+                type="button"
+                onClick={() => loadProject(item.id)}
+              >
+                <span className="media-thumb small">
+                  {item.is_video ? "AV" : "AU"}
+                </span>
+                <span>
+                  <strong>{item.filename}</strong>
+                  <small>
+                    {item.result.language || "Auto"} ·{" "}
+                    {formatDate(item.created_at)}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="model-note">
           <strong>Supertonic 3</strong>
           <span>Built-in voice styles for fast on-device dubbing.</span>
         </div>
-        {SUPERTONIC_VOICES.map((item) => (
-          <button
-            key={item.id}
-            className={`voice-card ${voice === item.id ? 'active' : ''}`}
-            type="button"
-            onClick={() => setVoice(item.id)}
-          >
-            <span className="avatar-token">{item.id}</span>
-            <span>{item.name}</span>
-          </button>
-        ))}
+        <div className="voice-list-compact">
+          {SUPERTONIC_VOICES.map((item) => (
+            <button
+              key={item.id}
+              className={`voice-card ${voice === item.id ? "active" : ""}`}
+              type="button"
+              onClick={() => setVoice(item.id)}
+            >
+              <span className="avatar-token">{item.id}</span>
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </div>
       </aside>
 
       <section className="stage-column">
-        <form className="glass-card media-workbench" onSubmit={handleSubmit}>
+        <section className="glass-card media-workbench">
           <div className="card-header">
             <div>
               <p className="eyebrow">Timeline Master</p>
-              <h1>Dubbing Studio</h1>
+              <h1>Dubbing & Subtitle Studio</h1>
             </div>
-            <span className="badge">{result ? 'Timeline Ready' : 'Prepare Timeline'}</span>
-          </div>
-
-          <label className="drop-zone compact">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ALLOWED_MEDIA_EXTENSIONS.join(',')}
-              onChange={handleFileChange}
-              disabled={loading}
-            />
-            <span>{file ? file.name : 'Select source media'}</span>
-            <small>{file ? formatFileSize(file.size) : 'Generate transcript timing before export'}</small>
-          </label>
-
-          <div className="control-grid">
-            <label>
-              Source Language
-              <select value={language} onChange={(event) => setLanguage(event.target.value)} disabled={loading}>
-                <option value="">Auto-detect</option>
-                <option value="en">English</option>
-                <option value="es">Spanish</option>
-                <option value="fr">French</option>
-                <option value="de">German</option>
-                <option value="zh">Chinese</option>
-                <option value="ja">Japanese</option>
-              </select>
-            </label>
-            <label>
-              Timing Model
-              <select value={subtitleModel} onChange={(event) => setSubtitleModel(event.target.value)} disabled={loading}>
-                <option value="parakeet-tdt-0.6b">Parakeet TDT 0.6B</option>
-                <option value="whisper-base">Whisper Base</option>
-                <option value="whisper-medium">Whisper Medium</option>
-                <option value="whisper-large">Whisper Large</option>
-              </select>
-            </label>
+            <span className="badge">
+              {project ? "Project Loaded" : loading ? "Loading" : "No Project"}
+            </span>
           </div>
 
           {error && <div className="alert-card">{error}</div>}
 
-          <div className="button-row">
-            <button className="studio-button primary" disabled={loading || !file} type="submit">
-              {loading ? 'Preparing' : 'Build Timeline'}
-            </button>
-            {result && (
-              <button
-                className="studio-button ghost"
-                type="button"
-                onClick={() => {
-                  setResult(null);
-                  setPreview(null);
-                  setFile(null);
-                  if (fileInputRef.current) fileInputRef.current.value = '';
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </form>
+          {project ? (
+            <>
+              <div className="workflow-mode-row">
+                <label
+                  className={`mode-toggle ${enableSubtitles ? "active" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enableSubtitles}
+                    onChange={(event) =>
+                      setEnableSubtitles(event.target.checked)
+                    }
+                  />
+                  <span>Add subtitles</span>
+                </label>
+                <label
+                  className={`mode-toggle ${enableDubbing ? "active" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enableDubbing}
+                    onChange={(event) => setEnableDubbing(event.target.checked)}
+                  />
+                  <span>Add dubbings</span>
+                </label>
+              </div>
+
+              <div className="studio-preview-grid">
+                <div className="media-preview-frame">
+                  <div className="preview-label">
+                    <strong>Source Media</strong>
+                    <span>{project.filename}</span>
+                  </div>
+                  {sourceUrl && project.is_video ? (
+                    <video
+                      className="studio-video-preview"
+                      src={sourceUrl}
+                      controls
+                      preload="metadata"
+                    />
+                  ) : sourceUrl ? (
+                    <audio
+                      className="audio-player"
+                      src={sourceUrl}
+                      controls
+                      preload="metadata"
+                    />
+                  ) : (
+                    <div className="empty-panel small">
+                      Source media is unavailable.
+                    </div>
+                  )}
+                </div>
+
+                <div className="media-preview-frame">
+                  <div className="preview-label">
+                    <strong>Rendered Video</strong>
+                    <span>
+                      {renderedUrl
+                        ? renderedLabel
+                        : "Generate subtitles or dubbing to preview output"}
+                    </span>
+                  </div>
+                  {renderedUrl ? (
+                    <>
+                      <video
+                        className="studio-video-preview"
+                        src={renderedUrl}
+                        controls
+                        preload="metadata"
+                      />
+                      <div className="button-row wrap">
+                        <button
+                          className="studio-button ghost small"
+                          type="button"
+                          onClick={handleRenderedDownload}
+                        >
+                          Download Final Result
+                        </button>
+                        <button
+                          className="studio-button ghost small"
+                          type="button"
+                          onClick={handleRedoRender}
+                          disabled={!lastRenderAction || mediaLoading !== null}
+                        >
+                          Redo Render
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="empty-panel small">
+                      No rendered media yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="project-meta-strip">
+                <span>
+                  {project.is_video ? "Video source" : "Audio source"}
+                </span>
+                <span>{segments.length} timed segments</span>
+                <span>{project.model_used}</span>
+                <span>{project.result.language || "Auto language"}</span>
+              </div>
+            </>
+          ) : (
+            <div className="empty-panel">
+              <strong>No Live Editor work loaded</strong>
+              <span>
+                Run a transcription in Live Editor, then open it here for
+                subtitle and dubbing delivery.
+              </span>
+              <Link className="studio-button primary" to="/editor">
+                Open Live Editor
+              </Link>
+            </div>
+          )}
+        </section>
 
         <section className="glass-card timeline-card">
           <div className="card-header">
@@ -267,18 +534,23 @@ export function DubbingStudioPage() {
             <span>00:40</span>
           </div>
           <div className="timeline-track video-track">
-            <span>{file?.name || 'Source media track'}</span>
+            <span>{project?.filename || "Source media track"}</span>
           </div>
           <div className="timeline-track audio-track">
             {Array.from({ length: 48 }).map((_, index) => (
-              <i key={index} style={{ height: `${15 + ((index * 13) % 65)}%` }} />
+              <i
+                key={index}
+                style={{ height: `${15 + ((index * 13) % 65)}%` }}
+              />
             ))}
           </div>
           <div className="timeline-track dub-track">
-            <span>{segments.length ? `Dubbing: ${voice}` : 'Dubbed audio track'}</span>
+            <span>
+              {segments.length ? `Dubbing: ${voice}` : "Dubbed audio track"}
+            </span>
           </div>
           <div className="segment-strip">
-            {segments.slice(0, 5).map((segment) => (
+            {segments.slice(0, 8).map((segment) => (
               <span key={segment.id}>{formatTime(segment.start)}</span>
             ))}
           </div>
@@ -288,7 +560,11 @@ export function DubbingStudioPage() {
           <section className="glass-card preview-card">
             <div className="card-header">
               <h2>{subtitleFormat.toUpperCase()} Preview</h2>
-              <button className="studio-button ghost small" type="button" onClick={() => navigator.clipboard.writeText(preview)}>
+              <button
+                className="studio-button ghost small"
+                type="button"
+                onClick={() => navigator.clipboard.writeText(preview)}
+              >
                 Copy
               </button>
             </div>
@@ -302,64 +578,206 @@ export function DubbingStudioPage() {
           <h2>Dubbing Config</h2>
           <label>
             Target Language
-            <select value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value)}>
+            <select
+              value={targetLanguage}
+              onChange={(event) => setTargetLanguage(event.target.value)}
+            >
               {SUPERTONIC_LANGUAGES.map((item) => (
-                <option key={item.code} value={item.code}>{item.label}</option>
+                <option key={item.code} value={item.code}>
+                  {item.label}
+                </option>
               ))}
             </select>
           </label>
           <label>
             TTS Model
-            <select value={ttsModel} onChange={(event) => setTtsModel(event.target.value)}>
-              <option value={SUPERTONIC_MODEL.id}>{SUPERTONIC_MODEL.name}</option>
+            <select
+              value={ttsModel}
+              onChange={(event) => setTtsModel(event.target.value)}
+            >
+              <option value={SUPERTONIC_MODEL.id}>
+                {SUPERTONIC_MODEL.name}
+              </option>
             </select>
           </label>
           <label>
             Voice
-            <select value={voice} onChange={(event) => setVoice(event.target.value)}>
+            <select
+              value={voice}
+              onChange={(event) => setVoice(event.target.value)}
+            >
               {SUPERTONIC_VOICES.map((item) => (
-                <option key={item.id} value={item.id}>{item.name}</option>
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
               ))}
             </select>
           </label>
           <label className="range-control">
-            <span>Speed <strong>{speed.toFixed(2)}x</strong></span>
-            <input min="0.7" max="2" step="0.05" type="range" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+            <span>
+              Speed <strong>{speed.toFixed(2)}x</strong>
+            </span>
+            <input
+              min="0.7"
+              max="2"
+              step="0.05"
+              type="range"
+              value={speed}
+              onChange={(event) => setSpeed(Number(event.target.value))}
+            />
           </label>
           <label className="range-control">
-            <span>Original Volume <strong>{Math.round(originalVolume * 100)}%</strong></span>
-            <input min="0" max="1" step="0.05" type="range" value={originalVolume} onChange={(event) => setOriginalVolume(Number(event.target.value))} />
+            <span>
+              Original Volume{" "}
+              <strong>{Math.round(originalVolume * 100)}%</strong>
+            </span>
+            <input
+              min="0"
+              max="1"
+              step="0.05"
+              type="range"
+              value={originalVolume}
+              onChange={(event) =>
+                setOriginalVolume(Number(event.target.value))
+              }
+              disabled={replaceOriginalAudio}
+            />
+          </label>
+          <label
+            className={`mode-toggle audio-replace-toggle ${replaceOriginalAudio ? "active" : ""}`}
+          >
+            <input
+              type="checkbox"
+              checked={replaceOriginalAudio}
+              onChange={(event) =>
+                setReplaceOriginalAudio(event.target.checked)
+              }
+            />
+            <span>Replace original audio with dub</span>
           </label>
         </section>
 
         <section className="glass-card export-card">
           <h2>Export & Deliver</h2>
-          <label>
-            Subtitle Format
-            <select value={subtitleFormat} onChange={(event) => setSubtitleFormat(event.target.value as 'srt' | 'vtt')}>
-              <option value="srt">SRT</option>
-              <option value="vtt">VTT</option>
-            </select>
-          </label>
-          <button className="export-option" type="button" disabled={!result} onClick={handlePreview}>
-            <strong>Preview Subtitle Tracks</strong>
-            <span>SRT/VTT transcript timing</span>
-          </button>
-          <button className="export-option" type="button" disabled={!result} onClick={handleDownloadSubtitle}>
-            <strong>Download Subtitle Tracks</strong>
-            <span>Deliver standalone captions</span>
-          </button>
-          <button className="export-option" type="button" disabled={!canExportVideo || mediaLoading !== null} onClick={() => handleEmbedVideo('soft')}>
-            <strong>{mediaLoading === 'soft' ? 'Rendering...' : 'Embed Soft Subtitles'}</strong>
-            <span>Multilingual MKV stream</span>
-          </button>
-          <button className="export-option" type="button" disabled={!canExportVideo || mediaLoading !== null} onClick={() => handleEmbedVideo('hard')}>
-            <strong>{mediaLoading === 'hard' ? 'Rendering...' : 'Hard Burn Subtitles'}</strong>
-            <span>Permanent MP4 render</span>
-          </button>
-          <button className="studio-button primary full" type="button" disabled={!canExportVideo || mediaLoading !== null} onClick={handleDubVideo}>
-            {mediaLoading === 'dub' ? 'Rendering Final Dub' : 'Render Final Dub'}
-          </button>
+          {enableSubtitles && (
+            <label>
+              Subtitle Format
+              <select
+                value={subtitleFormat}
+                onChange={(event) =>
+                  setSubtitleFormat(event.target.value as "srt" | "vtt")
+                }
+              >
+                <option value="srt">SRT</option>
+                <option value="vtt">VTT</option>
+              </select>
+            </label>
+          )}
+          {renderedMediaKeys.length > 0 && (
+            <label>
+              Existing Renders
+              <select
+                value=""
+                onChange={(event) =>
+                  event.target.value &&
+                  handleRenderedArtifactSelect(event.target.value)
+                }
+              >
+                <option value="">Open saved render</option>
+                {renderedMediaKeys.map((key) => (
+                  <option key={key} value={key}>
+                    {key.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {renderedUrl && (
+            <div className="button-row wrap">
+              <button
+                className="studio-button ghost"
+                type="button"
+                onClick={handleRenderedDownload}
+              >
+                Download Final Result
+              </button>
+              <button
+                className="studio-button ghost"
+                type="button"
+                onClick={handleRedoRender}
+                disabled={!lastRenderAction || mediaLoading !== null}
+              >
+                Redo Render
+              </button>
+            </div>
+          )}
+          {enableSubtitles && (
+            <>
+              <button
+                className="export-option"
+                type="button"
+                disabled={!project}
+                onClick={handlePreview}
+              >
+                <strong>Preview Subtitle Tracks</strong>
+                <span>SRT/VTT transcript timing</span>
+              </button>
+              <button
+                className="export-option"
+                type="button"
+                disabled={!project}
+                onClick={handleDownloadSubtitle}
+              >
+                <strong>Download Subtitle Tracks</strong>
+                <span>Deliver standalone captions</span>
+              </button>
+              <button
+                className="export-option"
+                type="button"
+                disabled={!canExportVideo || mediaLoading !== null}
+                onClick={() => handleEmbedVideo("soft")}
+              >
+                <strong>
+                  {mediaLoading === "soft"
+                    ? "Rendering..."
+                    : "Preview Soft Subtitles"}
+                </strong>
+                <span>Generate selectable subtitle video</span>
+              </button>
+              <button
+                className="export-option"
+                type="button"
+                disabled={!canExportVideo || mediaLoading !== null}
+                onClick={() => handleEmbedVideo("hard")}
+              >
+                <strong>
+                  {mediaLoading === "hard"
+                    ? "Rendering..."
+                    : "Preview Hard Burn"}
+                </strong>
+                <span>Generate permanent subtitle render</span>
+              </button>
+            </>
+          )}
+          {enableDubbing && (
+            <button
+              className="studio-button primary full"
+              type="button"
+              disabled={!canExportVideo || mediaLoading !== null}
+              onClick={handleDubVideo}
+            >
+              {mediaLoading === "dub"
+                ? "Rendering Final Dub"
+                : replaceOriginalAudio
+                  ? "Render Dub and Replace Audio"
+                  : "Render Final Dub"}
+            </button>
+          )}
+          {!enableSubtitles && !enableDubbing && (
+            <div className="empty-panel small">
+              Choose subtitles, dubbing, or both to render an output.
+            </div>
+          )}
         </section>
       </aside>
     </div>

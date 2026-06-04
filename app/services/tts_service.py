@@ -6,7 +6,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional, TypedDict, cast
 
 import numpy as np
 import scipy.io.wavfile as wavfile
@@ -24,6 +24,40 @@ DEFAULT_TTS_VOICE = "M1"
 DEFAULT_TTS_LANGUAGE = "en"
 SUPERTONIC_SAMPLE_RATE = 44100
 SUPERTONIC_TOTAL_STEPS = 8
+
+
+class TTSModelConfig(TypedDict):
+    """Static metadata for a supported TTS model."""
+
+    name: str
+    description: str
+    sample_rate: int
+    languages: list[str]
+    model_family: str
+    supports_instructions: bool
+    supports_voice_presets: bool
+    requires_reference_audio: bool
+    features: list[str]
+
+
+class TTSVoiceConfig(TypedDict):
+    """Static metadata for a supported TTS voice."""
+
+    name: str
+    language: str
+    model_family: str
+    description: str
+    native_language: str
+
+
+class TTSModelRuntime(TypedDict):
+    """Loaded TTS backend and its metadata."""
+
+    model: Any
+    config: TTSModelConfig
+    family: str
+    loaded: bool
+
 
 SUPERTONIC_LANGUAGES = [
     "en",
@@ -111,7 +145,7 @@ LANGUAGE_ALIASES = {
 
 SUPERTONIC_VOICES = ["M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5"]
 
-TTS_MODELS = {
+TTS_MODELS: dict[str, TTSModelConfig] = {
     DEFAULT_TTS_MODEL: {
         "name": "Supertonic 3",
         "description": "Lightning-fast on-device multilingual TTS using ONNX Runtime.",
@@ -130,7 +164,7 @@ TTS_MODELS = {
     },
 }
 
-VOICE_OPTIONS = {
+VOICE_OPTIONS: dict[str, TTSVoiceConfig] = {
     voice_id: {
         "name": f"Supertonic {voice_id}",
         "language": "multilingual",
@@ -141,9 +175,9 @@ VOICE_OPTIONS = {
     for voice_id in SUPERTONIC_VOICES
 }
 
-tts_cache = {}
+tts_cache: dict[str, TTSCacheEntry] = {}
 TTS_INDEX_PATH = settings.upload_dir / "tts_index.json"
-TTS_MODEL_CACHE = {}
+TTS_MODEL_CACHE: dict[str, TTSModelRuntime] = {}
 
 
 class TTSBackendUnavailableError(RuntimeError):
@@ -155,7 +189,11 @@ def persist_tts_cache() -> None:
     TTS_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = TTS_INDEX_PATH.with_suffix(".tmp")
     tmp_path.write_text(
-        json.dumps([entry.model_dump() for entry in tts_cache.values()], ensure_ascii=False, indent=2),
+        json.dumps(
+            [entry.model_dump() for entry in tts_cache.values()],
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
     tmp_path.replace(TTS_INDEX_PATH)
@@ -176,7 +214,10 @@ def load_tts_cache() -> None:
 
     recovered_any = False
     for audio_path in settings.tts_output_dir.iterdir():
-        if not audio_path.is_file() or audio_path.suffix.lower() not in {".wav", ".mp3"}:
+        if not audio_path.is_file() or audio_path.suffix.lower() not in {
+            ".wav",
+            ".mp3",
+        }:
             continue
         tts_id = audio_path.stem
         if tts_id in tts_cache:
@@ -222,7 +263,8 @@ def detect_language(text: str) -> str:
 
 def get_model_family(model_name: str) -> str:
     """Return the voice preset family for a TTS model."""
-    return TTS_MODELS.get(model_name, {}).get("model_family", "supertonic")
+    model_config = TTS_MODELS.get(model_name)
+    return model_config["model_family"] if model_config else "supertonic"
 
 
 def default_voice_for_model(_model_name: str) -> str:
@@ -235,7 +277,7 @@ def is_voice_compatible(model_name: str, voice: str) -> bool:
     return model_name == DEFAULT_TTS_MODEL and voice in VOICE_OPTIONS
 
 
-def load_tts_model(model_name: str):
+def load_tts_model(model_name: str) -> TTSModelRuntime:
     """Load the Supertonic 3 TTS engine."""
     from fastapi import HTTPException
 
@@ -268,27 +310,31 @@ def load_tts_model(model_name: str):
     except TTSBackendUnavailableError as exc:
         raise HTTPException(status_code=501, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to load TTS model: {str(exc)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load TTS model: {str(exc)}"
+        )
 
 
-def _normalize_generated_audio(audio) -> np.ndarray:
+def _normalize_generated_audio(audio: object) -> np.ndarray:
     """Convert model output to a 1-D float32 numpy array in -1..1 range."""
-    audio = np.asarray(audio)
-    if audio.ndim > 1:
-        audio = np.squeeze(audio)
-    if audio.ndim > 1:
-        audio = audio.reshape(-1)
+    audio_array = cast(np.ndarray, np.asarray(audio))
+    if audio_array.ndim > 1:
+        audio_array = np.squeeze(audio_array)
+    if audio_array.ndim > 1:
+        audio_array = audio_array.reshape(-1)
 
-    if np.issubdtype(audio.dtype, np.integer):
-        max_value = float(np.iinfo(audio.dtype).max)
-        audio = audio.astype(np.float32) / max_value
+    if np.issubdtype(audio_array.dtype, np.integer):
+        max_value = float(np.iinfo(audio_array.dtype).max)
+        audio_array = audio_array.astype(np.float32) / max_value
     else:
-        audio = audio.astype(np.float32)
+        audio_array = audio_array.astype(np.float32)
 
-    return np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.nan_to_num(audio_array, nan=0.0, posinf=0.0, neginf=0.0)
 
 
-def _duration_to_float(duration, audio_array: np.ndarray, sample_rate: int) -> float:
+def _duration_to_float(
+    duration: object, audio_array: np.ndarray, sample_rate: int
+) -> float:
     """Normalize Supertonic duration output, falling back to audio length."""
     try:
         duration_value = float(np.asarray(duration).reshape(-1)[0])
@@ -301,7 +347,7 @@ def _duration_to_float(duration, audio_array: np.ndarray, sample_rate: int) -> f
 
 
 def _synthesize_with_supertonic(
-    model,
+    model: Any,
     text: str,
     voice: str,
     language: str,
@@ -339,7 +385,9 @@ def synthesize_audio(
     from fastapi import HTTPException
 
     model_data = load_tts_model(model_name or DEFAULT_TTS_MODEL)
-    normalized_language = normalize_language_code(language) if language else detect_language(text)
+    normalized_language = (
+        normalize_language_code(language) if language else detect_language(text)
+    )
     normalized_voice = (voice or "").strip() or DEFAULT_TTS_VOICE
     if not is_voice_compatible(model_name or DEFAULT_TTS_MODEL, normalized_voice):
         normalized_voice = DEFAULT_TTS_VOICE
@@ -354,18 +402,24 @@ def synthesize_audio(
         )
 
         if audio_array.size == 0:
-            raise HTTPException(status_code=502, detail="TTS model returned an empty audio array.")
+            raise HTTPException(
+                status_code=502, detail="TTS model returned an empty audio array."
+            )
 
         peak = float(np.max(np.abs(audio_array)))
         if peak < 0.001:
-            raise HTTPException(status_code=502, detail="TTS model returned silent audio.")
+            raise HTTPException(
+                status_code=502, detail="TTS model returned silent audio."
+            )
         if peak > 1.0:
             audio_array = audio_array / peak
 
         if duration <= 0:
             duration = float(audio_array.shape[0] / sample_rate)
         if duration <= 0:
-            raise HTTPException(status_code=502, detail="TTS model returned zero-duration audio.")
+            raise HTTPException(
+                status_code=502, detail="TTS model returned zero-duration audio."
+            )
 
         return audio_array, sample_rate, duration
 
@@ -457,10 +511,14 @@ async def process_tts(
 
     normalized_text = (text or "").strip()
     if not normalized_text:
-        raise HTTPException(status_code=400, detail="Text is required for TTS synthesis.")
+        raise HTTPException(
+            status_code=400, detail="Text is required for TTS synthesis."
+        )
 
     if len(normalized_text) > 5000:
-        raise HTTPException(status_code=400, detail="Text too long. Maximum 5000 characters.")
+        raise HTTPException(
+            status_code=400, detail="Text too long. Maximum 5000 characters."
+        )
 
     if speed < 0.7 or speed > 2.0:
         raise HTTPException(status_code=400, detail="Speed must be between 0.7 and 2.0")

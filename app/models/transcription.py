@@ -2,13 +2,13 @@
 Transcription models and schemas
 """
 
-from datetime import datetime
 from typing import Optional, Literal
 from pydantic import BaseModel, Field
 
 
 class TranscriptionSegment(BaseModel):
     """A segment of transcribed text with timing"""
+
     id: int
     start: float
     end: float
@@ -17,6 +17,7 @@ class TranscriptionSegment(BaseModel):
 
 class TranscriptionResult(BaseModel):
     """Result from a transcription request"""
+
     text: str
     language: Optional[str] = None
     segments: list[TranscriptionSegment] = Field(default_factory=list)
@@ -25,6 +26,7 @@ class TranscriptionResult(BaseModel):
 
 class TranscriptionResponse(BaseModel):
     """API response for transcription"""
+
     success: bool
     transcription_id: str
     filename: str
@@ -39,6 +41,7 @@ class TranscriptionResponse(BaseModel):
 
 class TranscriptionInfo(BaseModel):
     """Information about a transcription"""
+
     id: str
     filename: str
     result: TranscriptionResult
@@ -51,6 +54,7 @@ class TranscriptionInfo(BaseModel):
 
 class STTModelInfo(BaseModel):
     """Information about an STT model"""
+
     id: str
     name: str
     type: Literal["whisper", "parakeet"]
@@ -59,6 +63,7 @@ class STTModelInfo(BaseModel):
 
 class STTModelsResponse(BaseModel):
     """Response for listing STT models"""
+
     models: list[STTModelInfo]
     default_model: str
     default_whisper: str
@@ -67,5 +72,6 @@ class STTModelsResponse(BaseModel):
 
 class SubtitleFormat(BaseModel):
     """Subtitle format specification"""
+
     format: Literal["srt", "vtt"] = "srt"
     embed_text: bool = True

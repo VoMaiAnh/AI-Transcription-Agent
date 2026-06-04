@@ -3,6 +3,7 @@ Subtitle generation service for creating SRT and VTT files
 """
 
 from pathlib import Path
+from typing import Any
 
 from app.config import settings
 from app.models.transcription import TranscriptionSegment
@@ -27,9 +28,7 @@ def normalize_subtitle_format(format: str = "srt") -> str:
     format_lower = (format or "srt").lower().strip()
 
     if format_lower not in SUPPORTED_SUBTITLE_FORMATS:
-        raise ValueError(
-            f"Unsupported subtitle format: {format}. Use 'srt' or 'vtt'."
-        )
+        raise ValueError(f"Unsupported subtitle format: {format}. Use 'srt' or 'vtt'.")
 
     return format_lower
 
@@ -157,8 +156,7 @@ def generate_vtt(segments: list["TranscriptionSegment"]) -> str:
 
 
 def generate_subtitle(
-    segments: list["TranscriptionSegment"],
-    format: str = "srt"
+    segments: list["TranscriptionSegment"], format: str = "srt"
 ) -> str:
     """
     Generate subtitle file content in specified format.
@@ -223,7 +221,9 @@ def get_subtitle_extension(format: str = "srt") -> str:
     return ".txt"
 
 
-def get_segments_from_transcription(transcription: dict) -> list[TranscriptionSegment]:
+def get_segments_from_transcription(
+    transcription: dict[str, Any],
+) -> list[TranscriptionSegment]:
     """
     Build typed subtitle segments from a cached transcription entry.
 
@@ -246,7 +246,7 @@ def get_segments_from_transcription(transcription: dict) -> list[TranscriptionSe
 
 def get_subtitle_output_path(
     transcription_id: str,
-    transcription: dict,
+    transcription: dict[str, Any],
     format: str = "srt",
 ) -> Path:
     """
@@ -270,7 +270,7 @@ def get_subtitle_output_path(
 
 def write_subtitle_file(
     transcription_id: str,
-    transcription: dict,
+    transcription: dict[str, Any],
     format: str = "srt",
 ) -> Path:
     """
@@ -297,7 +297,9 @@ def write_subtitle_file(
         )
 
     subtitle_content = generate_subtitle(segments, format_lower)
-    subtitle_path = get_subtitle_output_path(transcription_id, transcription, format_lower)
+    subtitle_path = get_subtitle_output_path(
+        transcription_id, transcription, format_lower
+    )
     subtitle_path.parent.mkdir(parents=True, exist_ok=True)
     subtitle_path.write_text(subtitle_content, encoding="utf-8")
 

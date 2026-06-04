@@ -2,7 +2,6 @@
 Application configuration using pydantic-settings
 """
 
-import os
 from pathlib import Path
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,10 +11,7 @@ class Settings(BaseSettings):
     """Application settings"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
 
     # Application settings
@@ -50,7 +46,7 @@ class Settings(BaseSettings):
 
     @field_validator("DEBUG", mode="before")
     @classmethod
-    def parse_debug_flag(cls, value):
+    def parse_debug_flag(cls, value: object) -> object:
         """Accept common deployment words for DEBUG in addition to booleans."""
         if isinstance(value, str):
             normalized = value.strip().lower()

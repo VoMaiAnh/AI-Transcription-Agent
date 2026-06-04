@@ -2,10 +2,11 @@
 Local file storage backend
 """
 
-import os
 import shutil
 from pathlib import Path
-from typing import Optional, BinaryIO
+from typing import Optional
+
+from fastapi import UploadFile
 
 from app.config import settings
 
@@ -13,7 +14,7 @@ from app.config import settings
 class LocalStorage:
     """Local file storage backend"""
 
-    def __init__(self, base_dir: Optional[Path] = None):
+    def __init__(self, base_dir: Optional[Path] = None) -> None:
         """
         Initialize local storage
 
@@ -24,10 +25,7 @@ class LocalStorage:
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def save_file(
-        self,
-        content: bytes,
-        filename: str,
-        subdirectory: Optional[str] = None
+        self, content: bytes, filename: str, subdirectory: Optional[str] = None
     ) -> Path:
         """
         Save file to storage
@@ -54,10 +52,7 @@ class LocalStorage:
         return file_path
 
     def save_uploaded_file(
-        self,
-        file,
-        filename: str,
-        subdirectory: Optional[str] = None
+        self, file: UploadFile, filename: str, subdirectory: Optional[str] = None
     ) -> Path:
         """
         Save uploaded file to storage
@@ -105,11 +100,7 @@ class LocalStorage:
         with open(file_path, "rb") as f:
             return f.read()
 
-    def get_file_path(
-        self,
-        filename: str,
-        subdirectory: Optional[str] = None
-    ) -> Path:
+    def get_file_path(self, filename: str, subdirectory: Optional[str] = None) -> Path:
         """
         Get path to file
 
@@ -124,11 +115,7 @@ class LocalStorage:
             return self.base_dir / subdirectory / filename
         return self.base_dir / filename
 
-    def file_exists(
-        self,
-        filename: str,
-        subdirectory: Optional[str] = None
-    ) -> bool:
+    def file_exists(self, filename: str, subdirectory: Optional[str] = None) -> bool:
         """
         Check if file exists in storage
 
@@ -142,11 +129,7 @@ class LocalStorage:
         file_path = self.get_file_path(filename, subdirectory)
         return file_path.exists()
 
-    def delete_file(
-        self,
-        filename: str,
-        subdirectory: Optional[str] = None
-    ) -> bool:
+    def delete_file(self, filename: str, subdirectory: Optional[str] = None) -> bool:
         """
         Delete file from storage
 
@@ -164,11 +147,7 @@ class LocalStorage:
             return True
         return False
 
-    def get_file_size(
-        self,
-        filename: str,
-        subdirectory: Optional[str] = None
-    ) -> int:
+    def get_file_size(self, filename: str, subdirectory: Optional[str] = None) -> int:
         """
         Get file size in bytes
 

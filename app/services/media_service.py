@@ -7,7 +7,7 @@ import math
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 import scipy.io.wavfile as wavfile
@@ -20,7 +20,11 @@ from app.services.subtitle_service import (
     normalize_subtitle_format,
     write_subtitle_file,
 )
-from app.services.tts_service import DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE, synthesize_audio
+from app.services.tts_service import (
+    DEFAULT_TTS_MODEL,
+    DEFAULT_TTS_VOICE,
+    synthesize_audio,
+)
 from app.utils.file_utils import safe_remove_file
 
 
@@ -56,10 +60,12 @@ def _run_ffmpeg(args: list[str]) -> None:
         raise RuntimeError(f"FFmpeg failed: {message}")
 
 
-def _require_video_source(transcription: dict) -> Path:
+def _require_video_source(transcription: dict[str, Any]) -> Path:
     """Return the retained source video path for a transcription."""
     if not transcription.get("is_video"):
-        raise ValueError("Subtitle embedding and dubbing require an uploaded video source")
+        raise ValueError(
+            "Subtitle embedding and dubbing require an uploaded video source"
+        )
 
     source_path = Path(transcription.get("source_path", ""))
     if not source_path.exists():
@@ -81,7 +87,7 @@ def _escape_subtitle_filter_path(path: Path) -> str:
 
 def create_subtitled_video(
     transcription_id: str,
-    transcription: dict,
+    transcription: dict[str, Any],
     mode: str = "soft",
     format: str = "srt",
 ) -> Path:
@@ -108,7 +114,7 @@ def create_subtitled_video(
     output_dir = settings.media_output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    media_paths = transcription.setdefault("media_paths", {})
+    media_paths = cast(dict[str, str], transcription.setdefault("media_paths", {}))
     cache_key = f"subtitles_{mode_lower}_{format_lower}"
 
     if mode_lower == "soft":
@@ -210,7 +216,7 @@ def _with_volume(audio: AudioSegment, volume: float) -> AudioSegment:
 
 def _segments_for_target_language(
     source_path: Path,
-    transcription: dict,
+    transcription: dict[str, Any],
     target_language: Optional[str],
     whisper_model: str,
 ) -> list[TranscriptionSegment]:
@@ -244,7 +250,7 @@ def _segments_for_target_language(
 
 def create_dubbed_video(
     transcription_id: str,
-    transcription: dict,
+    transcription: dict[str, Any],
     target_language: Optional[str] = None,
     tts_model: str = DEFAULT_TTS_MODEL,
     voice: str = DEFAULT_TTS_VOICE,
@@ -316,13 +322,19 @@ def create_dubbed_video(
         )
         spoken_segment = _audio_array_to_segment(audio_data, sample_rate)
         spoken_segment = _fit_audio_to_duration(spoken_segment, target_ms)
-        dubbed_track = dubbed_track.overlay(spoken_segment, position=int(segment.start * 1000))
+        dubbed_track = dubbed_track.overlay(
+            spoken_segment, position=int(segment.start * 1000)
+        )
 
     if original_volume > 0 and len(source_audio) > 0:
         source_bed = source_audio[:base_duration_ms]
         if len(source_bed) < base_duration_ms:
-            source_bed += AudioSegment.silent(duration=base_duration_ms - len(source_bed))
-        mixed_audio = _with_volume(source_bed, min(original_volume, 1.0)).overlay(dubbed_track)
+            source_bed += AudioSegment.silent(
+                duration=base_duration_ms - len(source_bed)
+            )
+        mixed_audio = _with_volume(source_bed, min(original_volume, 1.0)).overlay(
+            dubbed_track
+        )
     else:
         mixed_audio = dubbed_track
 
@@ -354,5 +366,6 @@ def create_dubbed_video(
     )
 
     safe_remove_file(str(audio_path))
-    transcription.setdefault("media_paths", {})[f"dubbed_{target}"] = str(output_path)
+    media_paths = cast(dict[str, str], transcription.setdefault("media_paths", {}))
+    media_paths[f"dubbed_{target}"] = str(output_path)
     return output_path

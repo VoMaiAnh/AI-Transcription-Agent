@@ -33,6 +33,6 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 
-# Research and improvements 
+# Research and improvements
 **/research/
 research/

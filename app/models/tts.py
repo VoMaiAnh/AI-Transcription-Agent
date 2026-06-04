@@ -2,13 +2,13 @@
 TTS (Text-to-Speech) models and schemas
 """
 
-from datetime import datetime
 from typing import Optional, Literal
 from pydantic import BaseModel, Field
 
 
 class TTSModelInfo(BaseModel):
     """Information about a TTS model"""
+
     id: str
     name: str
     description: str
@@ -23,12 +23,14 @@ class TTSModelInfo(BaseModel):
 
 class TTSModelsResponse(BaseModel):
     """Response for listing TTS models"""
+
     models: list[TTSModelInfo]
     default_model: str
 
 
 class TTSVoiceInfo(BaseModel):
     """Information about a TTS voice"""
+
     id: str
     name: str
     language: str
@@ -39,12 +41,14 @@ class TTSVoiceInfo(BaseModel):
 
 class TTSVoicesResponse(BaseModel):
     """Response for listing TTS voices"""
+
     voices: list[TTSVoiceInfo]
     default_voice: str
 
 
 class TTSRequest(BaseModel):
     """Request for TTS synthesis"""
+
     text: str = Field(..., min_length=1, max_length=5000)
     model: str = "Supertone/supertonic-3"
     voice: str = "M1"
@@ -57,6 +61,7 @@ class TTSRequest(BaseModel):
 
 class TTSResponse(BaseModel):
     """Response for TTS synthesis"""
+
     success: bool
     tts_id: str
     text: str
@@ -69,6 +74,7 @@ class TTSResponse(BaseModel):
 
 class TTSCacheEntry(BaseModel):
     """Cached TTS result"""
+
     id: str
     text: str
     model: str
@@ -84,5 +90,6 @@ class TTSCacheEntry(BaseModel):
 
 class TTSListResponse(BaseModel):
     """Response for listing TTS results"""
+
     results: list[TTSCacheEntry]
     total: int

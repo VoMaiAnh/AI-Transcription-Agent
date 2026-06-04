@@ -1,34 +1,34 @@
 /**
  * Subtitle Generator Page
  */
-import { useRef, useState } from 'react';
-import * as api from '../api/client';
-import { TranscriptionResponse } from '../types';
+import { useRef, useState } from "react";
+import * as api from "../api/client";
+import { TranscriptionResponse } from "../types";
 
 const ALLOWED_EXTENSIONS = [
-  '.mp3',
-  '.wav',
-  '.flac',
-  '.ogg',
-  '.m4a',
-  '.aac',
-  '.mp4',
-  '.mov',
-  '.mkv',
-  '.webm',
-  '.avi',
+  ".mp3",
+  ".wav",
+  ".flac",
+  ".ogg",
+  ".m4a",
+  ".aac",
+  ".mp4",
+  ".mov",
+  ".mkv",
+  ".webm",
+  ".avi",
 ];
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 export function SubtitleGeneratorPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [language, setLanguage] = useState('');
-  const [model, setModel] = useState('parakeet-tdt-0.6b');
+  const [language, setLanguage] = useState("");
+  const [model, setModel] = useState("parakeet-tdt-0.6b");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<TranscriptionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [subtitleFormat, setSubtitleFormat] = useState<'srt' | 'vtt'>('srt');
+  const [subtitleFormat, setSubtitleFormat] = useState<"srt" | "vtt">("srt");
   const [preview, setPreview] = useState<string | null>(null);
   const [mediaLoading, setMediaLoading] = useState<string | null>(null);
 
@@ -38,14 +38,16 @@ export function SubtitleGeneratorPage() {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
-    const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
+    const ext = "." + selectedFile.name.split(".").pop()?.toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      setError(`Invalid file format. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`);
+      setError(
+        `Invalid file format. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}`,
+      );
       return;
     }
 
     if (selectedFile.size > MAX_FILE_SIZE) {
-      setError('File too large. Maximum size is 50MB.');
+      setError("File too large. Maximum size is 50MB.");
       return;
     }
 
@@ -56,7 +58,7 @@ export function SubtitleGeneratorPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
-      setError('Please select a file');
+      setError("Please select a file");
       return;
     }
 
@@ -79,7 +81,7 @@ export function SubtitleGeneratorPage() {
       setProgress(100);
       setResult(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Transcription failed');
+      setError(err instanceof Error ? err.message : "Transcription failed");
     } finally {
       clearInterval(progressInterval);
       setLoading(false);
@@ -88,7 +90,7 @@ export function SubtitleGeneratorPage() {
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
@@ -97,26 +99,31 @@ export function SubtitleGeneratorPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleDownloadSubtitle = async (format: 'srt' | 'vtt') => {
+  const handleDownloadSubtitle = async (format: "srt" | "vtt") => {
     if (!result?.transcription_id) return;
     try {
       const { content, filename, mediaType } = await api.downloadSubtitle(
         result.transcription_id,
-        format
+        format,
       );
       downloadBlob(new Blob([content], { type: mediaType }), filename);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download subtitle');
+      setError(
+        err instanceof Error ? err.message : "Failed to download subtitle",
+      );
     }
   };
 
   const handlePreview = async () => {
     if (!result?.transcription_id) return;
     try {
-      const { content } = await api.downloadSubtitle(result.transcription_id, subtitleFormat);
+      const { content } = await api.downloadSubtitle(
+        result.transcription_id,
+        subtitleFormat,
+      );
       setPreview(content);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load preview');
+      setError(err instanceof Error ? err.message : "Failed to load preview");
     }
   };
 
@@ -126,19 +133,26 @@ export function SubtitleGeneratorPage() {
     }
   };
 
-  const handleEmbedVideo = async (mode: 'soft' | 'hard') => {
+  const handleEmbedVideo = async (mode: "soft" | "hard") => {
     if (!result?.transcription_id) return;
     setMediaLoading(mode);
     setError(null);
 
     try {
-      const { blob, filename } = await api.embedSubtitleVideo(result.transcription_id, {
-        mode,
-        format: subtitleFormat,
-      });
+      const { blob, filename } = await api.embedSubtitleVideo(
+        result.transcription_id,
+        {
+          mode,
+          format: subtitleFormat,
+        },
+      );
       downloadBlob(blob, filename);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate subtitled video');
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to generate subtitled video",
+      );
     } finally {
       setMediaLoading(null);
     }
@@ -146,17 +160,19 @@ export function SubtitleGeneratorPage() {
 
   const handleDubVideo = async () => {
     if (!result?.transcription_id) return;
-    setMediaLoading('dub');
+    setMediaLoading("dub");
     setError(null);
 
     try {
       const { blob, filename } = await api.dubVideo(result.transcription_id, {
-        target_language: result.language === 'en' ? undefined : 'en',
+        target_language: result.language === "en" ? undefined : "en",
         original_volume: 0.15,
       });
       downloadBlob(blob, filename);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate dubbed video');
+      setError(
+        err instanceof Error ? err.message : "Failed to generate dubbed video",
+      );
     } finally {
       setMediaLoading(null);
     }
@@ -164,23 +180,23 @@ export function SubtitleGeneratorPage() {
 
   const handleReset = () => {
     setFile(null);
-    setLanguage('');
+    setLanguage("");
     setResult(null);
     setError(null);
     setProgress(0);
     setPreview(null);
     setMediaLoading(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
   const segmentCount = result?.segments ? result.segments.length : 0;
@@ -190,7 +206,10 @@ export function SubtitleGeneratorPage() {
     <div className="page">
       <div className="page-header">
         <h1>Subtitle Generator</h1>
-        <p>Generate SRT/VTT subtitles and video subtitle outputs from timestamped speech recognition</p>
+        <p>
+          Generate SRT/VTT subtitles and video subtitle outputs from timestamped
+          speech recognition
+        </p>
       </div>
 
       <div className="card">
@@ -201,7 +220,7 @@ export function SubtitleGeneratorPage() {
               ref={fileInputRef}
               type="file"
               id="file"
-              accept={ALLOWED_EXTENSIONS.join(',')}
+              accept={ALLOWED_EXTENSIONS.join(",")}
               onChange={handleFileChange}
               disabled={loading}
             />
@@ -216,9 +235,14 @@ export function SubtitleGeneratorPage() {
           {loading && (
             <div className="progress-container">
               <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${progress}%` }} />
+                <div
+                  className="progress-fill"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
-              <p className="progress-text">Processing... {Math.round(progress)}%</p>
+              <p className="progress-text">
+                Processing... {Math.round(progress)}%
+              </p>
             </div>
           )}
 
@@ -254,7 +278,9 @@ export function SubtitleGeneratorPage() {
                 disabled={loading}
               >
                 <optgroup label="Parakeet TDT Models">
-                  <option value="parakeet-tdt-0.6b">Parakeet TDT 0.6B v3 (Recommended)</option>
+                  <option value="parakeet-tdt-0.6b">
+                    Parakeet TDT 0.6B v3 (Recommended)
+                  </option>
                 </optgroup>
                 <optgroup label="Other Models">
                   <option value="whisper-base">Whisper Base</option>
@@ -271,11 +297,19 @@ export function SubtitleGeneratorPage() {
           {error && <div className="alert alert-error">{error}</div>}
 
           <div className="form-actions">
-            <button type="submit" className="btn btn-primary" disabled={loading || !file}>
-              {loading ? 'Processing...' : 'Generate Subtitles'}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading || !file}
+            >
+              {loading ? "Processing..." : "Generate Subtitles"}
             </button>
             {result && (
-              <button type="button" className="btn btn-secondary" onClick={handleReset}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleReset}
+              >
                 Clear
               </button>
             )}
@@ -287,15 +321,22 @@ export function SubtitleGeneratorPage() {
             <div className="result-header">
               <h3>Subtitles Generated</h3>
               <div className="result-meta">
-                <span className="badge">{result.language || 'Auto'}</span>
-                <span className="badge badge-secondary">{result.model_used}</span>
-                <span className="badge badge-info">{segmentCount} segments</span>
+                <span className="badge">{result.language || "Auto"}</span>
+                <span className="badge badge-secondary">
+                  {result.model_used}
+                </span>
+                <span className="badge badge-info">
+                  {segmentCount} segments
+                </span>
               </div>
             </div>
 
-            <div className="result-text" style={{ maxHeight: '200px', fontSize: '0.9em' }}>
+            <div
+              className="result-text"
+              style={{ maxHeight: "200px", fontSize: "0.9em" }}
+            >
               {result.text.substring(0, 500)}
-              {result.text.length > 500 && '...'}
+              {result.text.length > 500 && "..."}
             </div>
 
             <div className="result-stats">
@@ -310,12 +351,14 @@ export function SubtitleGeneratorPage() {
             </div>
 
             <div className="result-actions">
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
+              <div className="form-group" style={{ marginBottom: "1rem" }}>
                 <label htmlFor="format">Preview Format</label>
                 <select
                   id="format"
                   value={subtitleFormat}
-                  onChange={(e) => setSubtitleFormat(e.target.value as 'srt' | 'vtt')}
+                  onChange={(e) =>
+                    setSubtitleFormat(e.target.value as "srt" | "vtt")
+                  }
                   disabled={loading}
                 >
                   <option value="srt">SRT (SubRip - most compatible)</option>
@@ -326,37 +369,53 @@ export function SubtitleGeneratorPage() {
               <button className="btn btn-outline" onClick={handlePreview}>
                 Preview {subtitleFormat.toUpperCase()}
               </button>
-              <button className="btn btn-outline" onClick={handleCopyToClipboard} disabled={!preview}>
+              <button
+                className="btn btn-outline"
+                onClick={handleCopyToClipboard}
+                disabled={!preview}
+              >
                 Copy to Clipboard
               </button>
-              <button className="btn btn-outline" onClick={() => handleDownloadSubtitle('srt')}>
+              <button
+                className="btn btn-outline"
+                onClick={() => handleDownloadSubtitle("srt")}
+              >
                 Download SRT
               </button>
-              <button className="btn btn-outline" onClick={() => handleDownloadSubtitle('vtt')}>
+              <button
+                className="btn btn-outline"
+                onClick={() => handleDownloadSubtitle("vtt")}
+              >
                 Download VTT
               </button>
               {hasVideoOutput && (
                 <>
                   <button
                     className="btn btn-outline"
-                    onClick={() => handleEmbedVideo('soft')}
+                    onClick={() => handleEmbedVideo("soft")}
                     disabled={mediaLoading !== null}
                   >
-                    {mediaLoading === 'soft' ? 'Generating...' : 'Download Soft-Subtitled Video'}
+                    {mediaLoading === "soft"
+                      ? "Generating..."
+                      : "Download Soft-Subtitled Video"}
                   </button>
                   <button
                     className="btn btn-outline"
-                    onClick={() => handleEmbedVideo('hard')}
+                    onClick={() => handleEmbedVideo("hard")}
                     disabled={mediaLoading !== null}
                   >
-                    {mediaLoading === 'hard' ? 'Generating...' : 'Download Burned-In Video'}
+                    {mediaLoading === "hard"
+                      ? "Generating..."
+                      : "Download Burned-In Video"}
                   </button>
                   <button
                     className="btn btn-outline"
                     onClick={handleDubVideo}
                     disabled={mediaLoading !== null}
                   >
-                    {mediaLoading === 'dub' ? 'Generating...' : 'Download Dubbed Video'}
+                    {mediaLoading === "dub"
+                      ? "Generating..."
+                      : "Download Dubbed Video"}
                   </button>
                 </>
               )}
@@ -375,7 +434,10 @@ export function SubtitleGeneratorPage() {
       <div className="info-cards">
         <div className="info-card">
           <h4>Precise Timestamps</h4>
-          <p>Parakeet TDT uses transducer architecture for accurate subtitle timing</p>
+          <p>
+            Parakeet TDT uses transducer architecture for accurate subtitle
+            timing
+          </p>
         </div>
         <div className="info-card">
           <h4>24+ Languages</h4>
@@ -383,7 +445,10 @@ export function SubtitleGeneratorPage() {
         </div>
         <div className="info-card">
           <h4>Video Outputs</h4>
-          <p>Create SRT/VTT files, embedded subtitle videos, and first-pass dubbed videos</p>
+          <p>
+            Create SRT/VTT files, embedded subtitle videos, and first-pass
+            dubbed videos
+          </p>
         </div>
       </div>
     </div>

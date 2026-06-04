@@ -22,7 +22,7 @@ An AI-powered audio/video transcription and text-to-speech application using Whi
 - **Responsive design** that works on all devices
 - **Real-time progress** indicators
 - **History management** for transcriptions and TTS results
-  
+
 ### 🖥️ App Screenshots
 
 <details>

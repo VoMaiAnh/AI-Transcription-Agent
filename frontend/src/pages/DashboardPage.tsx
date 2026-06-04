@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import * as api from '../api/client';
-import { HealthResponse, TranscriptionInfo, TTSCacheEntry } from '../types';
-import { formatDate } from './pageUtils';
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import * as api from "../api/client";
+import { HealthResponse, TranscriptionInfo, TTSCacheEntry } from "../types";
+import { formatDate } from "./pageUtils";
 
 type DashboardItem = {
   id: string;
   name: string;
-  type: 'Transcription' | 'TTS';
+  type: "Transcription" | "TTS";
   model: string;
   createdAt: string;
   language?: string | null;
@@ -40,7 +40,9 @@ export function DashboardPage() {
         setHealth(healthData);
       } catch (err) {
         if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+        setError(
+          err instanceof Error ? err.message : "Failed to load dashboard data",
+        );
       } finally {
         if (mounted) setLoading(false);
       }
@@ -56,7 +58,7 @@ export function DashboardPage() {
     const transcriptionItems = transcriptions.map((item) => ({
       id: item.id,
       name: item.filename,
-      type: 'Transcription' as const,
+      type: "Transcription" as const,
       model: item.model_used,
       createdAt: item.created_at,
       language: item.result.language,
@@ -65,21 +67,24 @@ export function DashboardPage() {
     const ttsItems = ttsResults.map((item) => ({
       id: item.id,
       name: item.text.slice(0, 70) || `TTS result ${item.id}`,
-      type: 'TTS' as const,
+      type: "TTS" as const,
       model: item.model,
       createdAt: item.created_at,
       language: item.language,
     }));
 
     return [...transcriptionItems, ...ttsItems]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )
       .slice(0, 6);
   }, [transcriptions, ttsResults]);
 
   const languageSummary = useMemo(() => {
     const counts = new Map<string, number>();
     transcriptions.forEach((item) => {
-      const language = item.result.language || 'Auto';
+      const language = item.result.language || "Auto";
       counts.set(language, (counts.get(language) || 0) + 1);
     });
     return Array.from(counts.entries()).slice(0, 4);
@@ -95,7 +100,7 @@ export function DashboardPage() {
         </div>
         <div className="glass-card compact-status">
           <span className="status-dot" />
-          {health ? `${health.status} on ${health.device}` : 'Checking systems'}
+          {health ? `${health.status} on ${health.device}` : "Checking systems"}
         </div>
       </section>
 
@@ -112,17 +117,24 @@ export function DashboardPage() {
           ) : recentItems.length === 0 ? (
             <div className="empty-panel">
               <strong>No projects yet</strong>
-              <span>Start a transcription or dubbing pass to populate the dashboard.</span>
+              <span>
+                Start a transcription or dubbing pass to populate the dashboard.
+              </span>
             </div>
           ) : (
             <div className="project-list">
               {recentItems.map((item) => (
-                <article className="project-row" key={`${item.type}-${item.id}`}>
-                  <div className="media-thumb">{item.type === 'TTS' ? 'TT' : 'AV'}</div>
+                <article
+                  className="project-row"
+                  key={`${item.type}-${item.id}`}
+                >
+                  <div className="media-thumb">
+                    {item.type === "TTS" ? "TT" : "AV"}
+                  </div>
                   <div>
                     <h3>{item.name}</h3>
                     <p>
-                      {item.type} · {item.model} · {item.language || 'Auto'}
+                      {item.type} · {item.model} · {item.language || "Auto"}
                     </p>
                   </div>
                   <div className="row-meta">
@@ -155,34 +167,42 @@ export function DashboardPage() {
             <strong>{transcriptions.length}</strong>
           </div>
           <div className="meter">
-            <span style={{ width: `${Math.min(transcriptions.length * 8, 100)}%` }} />
+            <span
+              style={{ width: `${Math.min(transcriptions.length * 8, 100)}%` }}
+            />
           </div>
           <div className="metric-row">
             <span>TTS Results</span>
             <strong>{ttsResults.length}</strong>
           </div>
           <div className="meter cyan">
-            <span style={{ width: `${Math.min(ttsResults.length * 8, 100)}%` }} />
+            <span
+              style={{ width: `${Math.min(ttsResults.length * 8, 100)}%` }}
+            />
           </div>
         </div>
 
         <div className="glass-card queue-card">
           <div className="card-header">
             <h2>AI Processing Queue</h2>
-            <span className="badge">{loading ? 'Loading' : 'Ready'}</span>
+            <span className="badge">{loading ? "Loading" : "Ready"}</span>
           </div>
           <div className="queue-item">
             <strong>Speech Recognition</strong>
-            <span>{health?.stt.available_models.length || 0} models available</span>
+            <span>
+              {health?.stt.available_models.length || 0} models available
+            </span>
             <div className="meter">
-              <span style={{ width: health ? '100%' : '35%' }} />
+              <span style={{ width: health ? "100%" : "35%" }} />
             </div>
           </div>
           <div className="queue-item">
             <strong>Voice Synthesis</strong>
-            <span>{health?.tts.available_models.length || 0} models available</span>
+            <span>
+              {health?.tts.available_models.length || 0} models available
+            </span>
             <div className="meter lime">
-              <span style={{ width: health ? '100%' : '25%' }} />
+              <span style={{ width: health ? "100%" : "25%" }} />
             </div>
           </div>
         </div>

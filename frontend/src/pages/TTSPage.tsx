@@ -1,76 +1,128 @@
 /**
  * Text-to-Speech Page
  */
-import { useMemo, useState, useEffect } from 'react';
-import * as api from '../api/client';
-import { TTSVoice } from '../types';
+import { useMemo, useState, useEffect } from "react";
+import * as api from "../api/client";
+import { TTSVoice } from "../types";
 
-const SUPERTONIC_MODEL = { id: 'Supertone/supertonic-3', name: 'Supertonic 3' };
+const SUPERTONIC_MODEL = { id: "Supertone/supertonic-3", name: "Supertonic 3" };
 
 const SUPERTONIC_LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'es', label: 'Spanish' },
-  { code: 'fr', label: 'French' },
-  { code: 'de', label: 'German' },
-  { code: 'ja', label: 'Japanese' },
-  { code: 'ko', label: 'Korean' },
-  { code: 'pt', label: 'Portuguese' },
-  { code: 'ru', label: 'Russian' },
-  { code: 'ar', label: 'Arabic' },
-  { code: 'bg', label: 'Bulgarian' },
-  { code: 'cs', label: 'Czech' },
-  { code: 'da', label: 'Danish' },
-  { code: 'el', label: 'Greek' },
-  { code: 'et', label: 'Estonian' },
-  { code: 'fi', label: 'Finnish' },
-  { code: 'hi', label: 'Hindi' },
-  { code: 'hr', label: 'Croatian' },
-  { code: 'hu', label: 'Hungarian' },
-  { code: 'id', label: 'Indonesian' },
-  { code: 'it', label: 'Italian' },
-  { code: 'lt', label: 'Lithuanian' },
-  { code: 'lv', label: 'Latvian' },
-  { code: 'nl', label: 'Dutch' },
-  { code: 'pl', label: 'Polish' },
-  { code: 'ro', label: 'Romanian' },
-  { code: 'sk', label: 'Slovak' },
-  { code: 'sl', label: 'Slovenian' },
-  { code: 'sv', label: 'Swedish' },
-  { code: 'tr', label: 'Turkish' },
-  { code: 'uk', label: 'Ukrainian' },
-  { code: 'vi', label: 'Vietnamese' },
-  { code: 'na', label: 'Unknown / fallback' },
+  { code: "en", label: "English" },
+  { code: "es", label: "Spanish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "pt", label: "Portuguese" },
+  { code: "ru", label: "Russian" },
+  { code: "ar", label: "Arabic" },
+  { code: "bg", label: "Bulgarian" },
+  { code: "cs", label: "Czech" },
+  { code: "da", label: "Danish" },
+  { code: "el", label: "Greek" },
+  { code: "et", label: "Estonian" },
+  { code: "fi", label: "Finnish" },
+  { code: "hi", label: "Hindi" },
+  { code: "hr", label: "Croatian" },
+  { code: "hu", label: "Hungarian" },
+  { code: "id", label: "Indonesian" },
+  { code: "it", label: "Italian" },
+  { code: "lt", label: "Lithuanian" },
+  { code: "lv", label: "Latvian" },
+  { code: "nl", label: "Dutch" },
+  { code: "pl", label: "Polish" },
+  { code: "ro", label: "Romanian" },
+  { code: "sk", label: "Slovak" },
+  { code: "sl", label: "Slovenian" },
+  { code: "sv", label: "Swedish" },
+  { code: "tr", label: "Turkish" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "vi", label: "Vietnamese" },
+  { code: "na", label: "Unknown / fallback" },
 ];
 
 const FALLBACK_VOICES: TTSVoice[] = [
-  { id: 'M1', name: 'Supertonic M1', language: 'multilingual', model_family: 'supertonic' },
-  { id: 'M2', name: 'Supertonic M2', language: 'multilingual', model_family: 'supertonic' },
-  { id: 'M3', name: 'Supertonic M3', language: 'multilingual', model_family: 'supertonic' },
-  { id: 'M4', name: 'Supertonic M4', language: 'multilingual', model_family: 'supertonic' },
-  { id: 'M5', name: 'Supertonic M5', language: 'multilingual', model_family: 'supertonic' },
-  { id: 'F1', name: 'Supertonic F1', language: 'multilingual', model_family: 'supertonic' },
-  { id: 'F2', name: 'Supertonic F2', language: 'multilingual', model_family: 'supertonic' },
-  { id: 'F3', name: 'Supertonic F3', language: 'multilingual', model_family: 'supertonic' },
-  { id: 'F4', name: 'Supertonic F4', language: 'multilingual', model_family: 'supertonic' },
-  { id: 'F5', name: 'Supertonic F5', language: 'multilingual', model_family: 'supertonic' },
+  {
+    id: "M1",
+    name: "Supertonic M1",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
+  {
+    id: "M2",
+    name: "Supertonic M2",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
+  {
+    id: "M3",
+    name: "Supertonic M3",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
+  {
+    id: "M4",
+    name: "Supertonic M4",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
+  {
+    id: "M5",
+    name: "Supertonic M5",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
+  {
+    id: "F1",
+    name: "Supertonic F1",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
+  {
+    id: "F2",
+    name: "Supertonic F2",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
+  {
+    id: "F3",
+    name: "Supertonic F3",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
+  {
+    id: "F4",
+    name: "Supertonic F4",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
+  {
+    id: "F5",
+    name: "Supertonic F5",
+    language: "multilingual",
+    model_family: "supertonic",
+  },
 ];
 
 export function TTSPage() {
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const [model, setModel] = useState(SUPERTONIC_MODEL.id);
-  const [voice, setVoice] = useState('M1');
+  const [voice, setVoice] = useState("M1");
   const [speed, setSpeed] = useState(1.0);
-  const [language, setLanguage] = useState('en');
-  const [outputFormat, setOutputFormat] = useState<'wav' | 'mp3'>('wav');
+  const [language, setLanguage] = useState("en");
+  const [outputFormat, setOutputFormat] = useState<"wav" | "mp3">("wav");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
 
-  const [availableVoices, setAvailableVoices] = useState<TTSVoice[]>(FALLBACK_VOICES);
+  const [availableVoices, setAvailableVoices] =
+    useState<TTSVoice[]>(FALLBACK_VOICES);
 
   useEffect(() => {
-    api.getTTSVoices()
+    api
+      .getTTSVoices()
       .then((res) => setAvailableVoices(res.voices))
       .catch(() => setAvailableVoices(FALLBACK_VOICES));
   }, []);
@@ -79,7 +131,7 @@ export function TTSPage() {
 
   useEffect(() => {
     if (!filteredVoices.some((item) => item.id === voice)) {
-      setVoice(filteredVoices[0]?.id || 'M1');
+      setVoice(filteredVoices[0]?.id || "M1");
     }
   }, [filteredVoices, voice]);
 
@@ -87,7 +139,7 @@ export function TTSPage() {
     e.preventDefault();
 
     if (!text.trim()) {
-      setError('Please enter text to synthesize');
+      setError("Please enter text to synthesize");
       return;
     }
 
@@ -95,28 +147,31 @@ export function TTSPage() {
     setError(null);
 
     try {
-      const { audioBlob, duration: audioDuration } = await api.synthesizeSpeech(text, {
-        model,
-        voice,
-        speed,
-        pitch: 1,
-        language,
-        instruction: null,
-        output_format: outputFormat,
-      });
+      const { audioBlob, duration: audioDuration } = await api.synthesizeSpeech(
+        text,
+        {
+          model,
+          voice,
+          speed,
+          pitch: 1,
+          language,
+          instruction: null,
+          output_format: outputFormat,
+        },
+      );
 
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
       setDuration(audioDuration);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'TTS synthesis failed');
+      setError(err instanceof Error ? err.message : "TTS synthesis failed");
     } finally {
       setLoading(false);
     }
   };
 
   const handleReset = () => {
-    setText('');
+    setText("");
     setAudioUrl(null);
     setDuration(null);
     setError(null);
@@ -142,9 +197,7 @@ export function TTSPage() {
               disabled={loading}
               rows={6}
             />
-            <div className="char-count">
-              {text.length} / 5000 characters
-            </div>
+            <div className="char-count">{text.length} / 5000 characters</div>
           </div>
 
           <div className="form-row">
@@ -157,7 +210,9 @@ export function TTSPage() {
                 disabled={loading}
               >
                 <optgroup label="Supertonic Models">
-                  <option value={SUPERTONIC_MODEL.id}>{SUPERTONIC_MODEL.name}</option>
+                  <option value={SUPERTONIC_MODEL.id}>
+                    {SUPERTONIC_MODEL.name}
+                  </option>
                 </optgroup>
               </select>
             </div>
@@ -189,7 +244,9 @@ export function TTSPage() {
                 disabled={loading}
               >
                 {SUPERTONIC_LANGUAGES.map((item) => (
-                  <option key={item.code} value={item.code}>{item.label}</option>
+                  <option key={item.code} value={item.code}>
+                    {item.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -218,7 +275,9 @@ export function TTSPage() {
               <select
                 id="format"
                 value={outputFormat}
-                onChange={(e) => setOutputFormat(e.target.value as 'wav' | 'mp3')}
+                onChange={(e) =>
+                  setOutputFormat(e.target.value as "wav" | "mp3")
+                }
                 disabled={loading}
               >
                 <option value="wav">WAV (Uncompressed)</option>
@@ -234,11 +293,19 @@ export function TTSPage() {
           )}
 
           <div className="form-actions">
-            <button type="submit" className="btn btn-primary" disabled={loading || !text.trim()}>
-              {loading ? 'Synthesizing...' : 'Synthesize'}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading || !text.trim()}
+            >
+              {loading ? "Synthesizing..." : "Synthesize"}
             </button>
             {audioUrl && (
-              <button type="button" className="btn btn-secondary" onClick={handleReset}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleReset}
+              >
                 Clear
               </button>
             )}
@@ -255,7 +322,12 @@ export function TTSPage() {
             </div>
 
             <div className="audio-container">
-              <audio controls src={audioUrl} autoPlay className="audio-player" />
+              <audio
+                controls
+                src={audioUrl}
+                autoPlay
+                className="audio-player"
+              />
             </div>
 
             <div className="result-actions">

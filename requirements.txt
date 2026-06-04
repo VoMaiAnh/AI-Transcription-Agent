@@ -28,3 +28,4 @@ aiofiles>=23.2.1
 scipy>=1.10.0
 pytest>=8.0.0
 httpx>=0.26.0
+pre-commit>=4.0.0

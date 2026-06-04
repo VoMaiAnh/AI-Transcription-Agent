@@ -3,7 +3,7 @@ TTS (Text-to-Speech) Router
 Handles text-to-speech synthesis using Supertonic 3
 """
 
-from typing import Optional
+from typing import Any, Optional
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import Response
 
@@ -27,31 +27,37 @@ router = APIRouter(prefix="/api/v1/tts", tags=["tts"])
 
 
 @router.get("/models", response_model=TTSModelsResponse)
-async def list_tts_models():
+async def list_tts_models() -> TTSModelsResponse:
     """List available TTS models"""
     return TTSModelsResponse(
-        models=get_available_models(),
-        default_model=DEFAULT_TTS_MODEL
+        models=get_available_models(), default_model=DEFAULT_TTS_MODEL
     )
 
 
 @router.get("/voices", response_model=TTSVoicesResponse)
-async def list_voices():
+async def list_voices() -> TTSVoicesResponse:
     """List available voice options"""
     return TTSVoicesResponse(
-        voices=get_available_voices(),
-        default_voice=DEFAULT_TTS_VOICE
+        voices=get_available_voices(), default_voice=DEFAULT_TTS_VOICE
     )
 
 
 @router.get("/synthesize")
-async def synthesize_tts_info():
+async def synthesize_tts_info() -> dict[str, Any]:
     """Return usage information for the POST-only audio synthesis operation."""
     return {
         "detail": "Use POST multipart/form-data to synthesize audio.",
         "method": "POST",
         "required_fields": ["text"],
-        "optional_fields": ["model", "voice", "speed", "pitch", "language", "instruction", "output_format"],
+        "optional_fields": [
+            "model",
+            "voice",
+            "speed",
+            "pitch",
+            "language",
+            "instruction",
+            "output_format",
+        ],
         "backend": {
             "supertonic": "Install with: pip install -r requirements.txt. The first synthesis run downloads Supertonic 3 assets from Hugging Face.",
         },
@@ -64,13 +70,20 @@ async def synthesize_tts_info():
 async def synthesize_tts(
     text: str = Form(..., description="Text to synthesize"),
     model: str = Form(DEFAULT_TTS_MODEL, description="TTS model to use"),
-    voice: str = Form(DEFAULT_TTS_VOICE, description="Supertonic voice preset: M1-M5 or F1-F5"),
+    voice: str = Form(
+        DEFAULT_TTS_VOICE, description="Supertonic voice preset: M1-M5 or F1-F5"
+    ),
     speed: float = Form(1.0, description="Speech speed (0.7-2.0)"),
     pitch: float = Form(1.0, description="Pitch adjustment (0.5-2.0)"),
-    language: Optional[str] = Form(None, description="Language name, or Auto/empty for auto-detection"),
-    instruction: Optional[str] = Form(None, description="Accepted for compatibility; ignored as a prompt by Supertonic"),
-    output_format: str = Form("wav", description="Output format: wav, mp3")
-):
+    language: Optional[str] = Form(
+        None, description="Language name, or Auto/empty for auto-detection"
+    ),
+    instruction: Optional[str] = Form(
+        None,
+        description="Accepted for compatibility; ignored as a prompt by Supertonic",
+    ),
+    output_format: str = Form("wav", description="Output format: wav, mp3"),
+) -> Response:
     """
     Synthesize speech from text using Supertonic 3.
 
@@ -83,7 +96,9 @@ async def synthesize_tts(
     """
     normalized_output_format = (output_format or "wav").lower().strip()
     if normalized_output_format not in {"wav", "mp3"}:
-        raise HTTPException(status_code=400, detail="output_format must be 'wav' or 'mp3'")
+        raise HTTPException(
+            status_code=400, detail="output_format must be 'wav' or 'mp3'"
+        )
 
     tts_id, audio_bytes, duration, sample_rate = await process_tts(
         text=text,
@@ -93,7 +108,7 @@ async def synthesize_tts(
         pitch=pitch,
         language=language,
         instruction=instruction,
-        output_format=normalized_output_format
+        output_format=normalized_output_format,
     )
 
     # Return audio response
@@ -110,12 +125,12 @@ async def synthesize_tts(
             "Content-Disposition": f'inline; filename="{filename}"',
             "Cache-Control": "no-store",
             "Content-Length": str(len(audio_bytes)),
-        }
+        },
     )
 
 
 @router.get("/result/{tts_id}")
-async def get_tts_result(tts_id: str):
+async def get_tts_result(tts_id: str) -> Any:
     """Get TTS result metadata by ID"""
     if tts_id not in tts_cache:
         raise HTTPException(status_code=404, detail="TTS result not found")
@@ -124,7 +139,7 @@ async def get_tts_result(tts_id: str):
 
 
 @router.delete("/result/{tts_id}")
-async def delete_tts_result(tts_id: str):
+async def delete_tts_result(tts_id: str) -> dict[str, str]:
     """Delete a TTS result"""
     if tts_id not in tts_cache:
         raise HTTPException(status_code=404, detail="TTS result not found")
@@ -135,9 +150,9 @@ async def delete_tts_result(tts_id: str):
 
 
 @router.get("/list")
-async def list_tts_results():
+async def list_tts_results() -> dict[str, Any]:
     """List all TTS results in cache"""
     return {
         "results": [entry.model_dump() for entry in tts_cache.values()],
-        "total": len(tts_cache)
+        "total": len(tts_cache),
     }

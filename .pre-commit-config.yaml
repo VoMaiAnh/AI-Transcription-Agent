@@ -1,0 +1,136 @@
+# .pre-commit-config.yaml
+# Pre-commit hooks for FastAPI (Python) + ReactJS (Node/TypeScript) monorepo
+# Install: pip install pre-commit && pre-commit install
+# Run all:  pre-commit run --all-files
+
+default_stages: [pre-commit]
+fail_fast: false
+
+repos:
+  # ─────────────────────────────────────────────────
+  # GENERAL
+  # ─────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: no-commit-to-branch
+        args: [--branch=main, --branch=master, --branch=production]
+
+  # ─────────────────────────────────────────────────
+  # SECRETS DETECTION
+  # ─────────────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.3
+    hooks:
+      - id: gitleaks
+
+  # ─────────────────────────────────────────────────
+  # PYTHON / FASTAPI BACKEND
+  # ─────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.12
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^app/
+      - id: ruff-format
+        files: ^app/
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.16.0
+    hooks:
+      - id: mypy
+        files: ^app/
+        args:
+          - --ignore-missing-imports
+          - --strict
+        additional_dependencies:
+          - fastapi
+          - pydantic>=2.0
+          - pydantic-settings>=2.0
+          - sqlalchemy[mypy]
+          - types-requests
+          - types-PyYAML
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: [-c, app/pyproject.toml]
+        files: ^app/
+        exclude: ^app/tests/
+
+  # ─────────────────────────────────────────────────
+  # JAVASCRIPT / REACT FRONTEND
+  # ─────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.28.0
+    hooks:
+      - id: eslint
+        files: ^frontend/.*\.[jt]sx?$
+        types: [file]
+        args: [--fix, --max-warnings=0]
+        additional_dependencies:
+          - eslint@^9
+          - eslint-plugin-react@latest
+          - eslint-plugin-react-hooks@latest
+          - "@typescript-eslint/eslint-plugin@latest"
+          - "@typescript-eslint/parser@latest"
+          - eslint-plugin-jsx-a11y@latest
+          - eslint-plugin-import@latest
+          - eslint-config-prettier@latest
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: ^frontend/
+        args: [--write]
+        types_or: [javascript, jsx, ts, tsx, css, html, json, yaml, markdown]
+        additional_dependencies:
+          - prettier@^3
+          - prettier-plugin-tailwindcss@latest  # remove if not using Tailwind
+
+  # ─────────────────────────────────────────────────
+  # DOCKER / CONTAINERS
+  # ─────────────────────────────────────────────────
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1-beta
+    hooks:
+      - id: hadolint-docker
+        args: [--failure-threshold=warning]
+
+  # ─────────────────────────────────────────────────
+  # COMMIT MESSAGE (Conventional Commits)
+  # ─────────────────────────────────────────────────
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - feat
+          - fix
+          - docs
+          - style
+          - refactor
+          - perf
+          - test
+          - build
+          - ci
+          - chore
+          - revert

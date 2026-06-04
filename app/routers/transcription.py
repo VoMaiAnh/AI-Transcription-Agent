@@ -4,9 +4,17 @@ Handles audio/video transcription endpoints using Whisper or Parakeet models
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, File, UploadFile, Form, HTTPException, BackgroundTasks, Query
+from fastapi import (
+    APIRouter,
+    File,
+    UploadFile,
+    Form,
+    HTTPException,
+    BackgroundTasks,
+    Query,
+)
 from fastapi.responses import FileResponse
 
 from app.models.transcription import (
@@ -36,14 +44,14 @@ from app.services.tts_service import DEFAULT_TTS_MODEL, DEFAULT_TTS_VOICE
 router = APIRouter(prefix="/api/v1", tags=["transcription"])
 
 
-def _get_transcription_or_404(transcription_id: str) -> dict:
+def _get_transcription_or_404(transcription_id: str) -> dict[str, Any]:
     """Return a cached transcription or raise 404."""
     if transcription_id not in transcription_cache:
         raise HTTPException(status_code=404, detail="Transcription not found")
     return transcription_cache[transcription_id]
 
 
-def _remove_transcription_artifacts(transcription: dict) -> None:
+def _remove_transcription_artifacts(transcription: dict[str, Any]) -> None:
     """Remove retained source/subtitle/media files for a deleted transcription."""
     paths = []
     if transcription.get("source_path"):
@@ -55,8 +63,38 @@ def _remove_transcription_artifacts(transcription: dict) -> None:
         safe_remove_file(str(path))
 
 
+def _file_response_for_path(
+    path_value: str, filename: Optional[str] = None
+) -> FileResponse:
+    """Return a file response for a retained source or rendered media path."""
+    path = Path(path_value)
+    if not path.exists() or not path.is_file():
+        raise HTTPException(
+            status_code=410, detail="Requested media file is no longer available"
+        )
+
+    media_types = {
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".flac": "audio/flac",
+        ".ogg": "audio/ogg",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+    }
+    media_type = media_types.get(path.suffix.lower(), get_video_media_type(path))
+
+    return FileResponse(
+        path=path,
+        media_type=media_type,
+        filename=filename or path.name,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.get("/models", response_model=STTModelsResponse)
-async def list_stt_models():
+async def list_stt_models() -> STTModelsResponse:
     """List available STT models"""
     from app.config import settings
 
@@ -64,7 +102,9 @@ async def list_stt_models():
         models=get_available_models(),
         default_model="whisper-base",
         default_whisper=settings.WHISPER_MODEL,
-        default_parakeet=getattr(settings, 'PARAKEET_MODEL', 'nvidia/parakeet-tdt-0.6b-v3')
+        default_parakeet=getattr(
+            settings, "PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3"
+        ),
     )
 
 
@@ -72,10 +112,17 @@ async def list_stt_models():
 async def transcribe(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Audio or video file to transcribe"),
-    language: Optional[str] = Form(None, description="Language code (e.g., 'en', 'zh', 'es')"),
-    model: Optional[str] = Form(None, description="Model: whisper-tiny/base/small/medium/large or parakeet-tdt-0.6b"),
-    task: str = Form("transcribe", description="Task: transcribe or translate (Whisper only)")
-):
+    language: Optional[str] = Form(
+        None, description="Language code (e.g., 'en', 'zh', 'es')"
+    ),
+    model: Optional[str] = Form(
+        None,
+        description="Model: whisper-tiny/base/small/medium/large or parakeet-tdt-0.6b",
+    ),
+    task: str = Form(
+        "transcribe", description="Task: transcribe or translate (Whisper only)"
+    ),
+) -> dict[str, Any]:
     """
     Transcribe an audio or video file using Whisper or Parakeet TDT models.
 
@@ -90,11 +137,12 @@ async def transcribe(
     - Precise timestamps, ideal for subtitle generation
     - CPU-optimized with ONNX Runtime
     """
-    transcription_id, transcription_data, files_to_cleanup = await process_transcription(
-        file=file,
-        language=language,
-        model=model,
-        task=task
+    (
+        transcription_id,
+        transcription_data,
+        files_to_cleanup,
+    ) = await process_transcription(
+        file=file, language=language, model=model, task=task
     )
 
     # Schedule files for cleanup
@@ -118,13 +166,41 @@ async def transcribe(
 
 
 @router.get("/transcription/{transcription_id}")
-async def get_transcription(transcription_id: str):
+async def get_transcription(transcription_id: str) -> dict[str, Any]:
     """Get transcription result by ID"""
     return _get_transcription_or_404(transcription_id)
 
 
+@router.get("/transcription/{transcription_id}/source")
+async def get_transcription_source(transcription_id: str) -> FileResponse:
+    """Stream the retained source media for a transcription."""
+    transcription = _get_transcription_or_404(transcription_id)
+    source_path = transcription.get("source_path")
+    if not source_path:
+        raise HTTPException(
+            status_code=404,
+            detail="Source media is not available for this transcription",
+        )
+    return _file_response_for_path(source_path, transcription.get("filename"))
+
+
+@router.get("/transcription/{transcription_id}/media/{media_key}")
+async def get_transcription_media(
+    transcription_id: str, media_key: str
+) -> FileResponse:
+    """Stream a rendered media artifact, such as subtitled or dubbed video."""
+    transcription = _get_transcription_or_404(transcription_id)
+    media_paths = transcription.get("media_paths", {})
+    media_path = media_paths.get(media_key)
+    if not media_path:
+        raise HTTPException(
+            status_code=404, detail=f"Media artifact '{media_key}' is not available"
+        )
+    return _file_response_for_path(media_path)
+
+
 @router.delete("/transcription/{transcription_id}")
-async def delete_transcription(transcription_id: str):
+async def delete_transcription(transcription_id: str) -> dict[str, str]:
     """Delete a transcription result"""
     transcription = _get_transcription_or_404(transcription_id)
     _remove_transcription_artifacts(transcription)
@@ -134,11 +210,11 @@ async def delete_transcription(transcription_id: str):
 
 
 @router.get("/list")
-async def list_transcriptions():
+async def list_transcriptions() -> dict[str, Any]:
     """List all transcriptions in cache"""
     return {
         "transcriptions": list(transcription_cache.values()),
-        "total": len(transcription_cache)
+        "total": len(transcription_cache),
     }
 
 
@@ -146,7 +222,7 @@ async def list_transcriptions():
 async def get_subtitle(
     transcription_id: str,
     format: str = Query("srt", description="Subtitle format: srt or vtt"),
-):
+) -> FileResponse:
     """
     Download subtitle file for a transcription
 
@@ -174,7 +250,7 @@ async def get_subtitle(
 async def post_subtitle(
     transcription_id: str,
     format: str = Form("srt", description="Subtitle format: srt or vtt"),
-):
+) -> FileResponse:
     """Backward-compatible subtitle download endpoint for older clients."""
     return await get_subtitle(transcription_id=transcription_id, format=format)
 
@@ -184,7 +260,7 @@ async def embed_subtitle_in_video(
     transcription_id: str,
     mode: str = Form("soft", description="Subtitle mode: soft or hard"),
     format: str = Form("srt", description="Subtitle format: srt or vtt"),
-):
+) -> FileResponse:
     """
     Generate a video with subtitles embedded.
 
@@ -222,21 +298,34 @@ async def embed_subtitle_in_video(
 @router.post("/dub/{transcription_id}")
 async def dub_video(
     transcription_id: str,
-    target_language: Optional[str] = Form(None, description="Optional target language. Use 'en' for Whisper translation."),
+    target_language: Optional[str] = Form(
+        None, description="Optional target language. Use 'en' for Whisper translation."
+    ),
     tts_model: str = Form(DEFAULT_TTS_MODEL, description="TTS model to use"),
-    voice: str = Form(DEFAULT_TTS_VOICE, description="Supertonic voice preset: M1-M5 or F1-F5"),
+    voice: str = Form(
+        DEFAULT_TTS_VOICE, description="Supertonic voice preset: M1-M5 or F1-F5"
+    ),
     speed: float = Form(1.0, description="Speech speed (0.7-2.0)"),
-    pitch: float = Form(1.0, description="Accepted for compatibility; ignored by Supertonic"),
-    original_volume: float = Form(0.15, description="Original audio bed volume from 0.0 to 1.0"),
-    whisper_model: str = Form("whisper-base", description="Whisper model for optional English translation"),
-):
+    pitch: float = Form(
+        1.0, description="Accepted for compatibility; ignored by Supertonic"
+    ),
+    original_volume: float = Form(
+        0.15,
+        description="Original audio bed volume from 0.0 to 1.0. Use 0.0 to replace original audio with the dub.",
+    ),
+    whisper_model: str = Form(
+        "whisper-base", description="Whisper model for optional English translation"
+    ),
+) -> FileResponse:
     """
     Generate a dubbed video by synthesizing timestamp-aligned speech per segment.
     """
     transcription = _get_transcription_or_404(transcription_id)
 
     if original_volume < 0 or original_volume > 1:
-        raise HTTPException(status_code=400, detail="original_volume must be between 0.0 and 1.0")
+        raise HTTPException(
+            status_code=400, detail="original_volume must be between 0.0 and 1.0"
+        )
 
     try:
         output_path = create_dubbed_video(

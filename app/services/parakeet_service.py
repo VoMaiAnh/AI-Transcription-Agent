@@ -6,15 +6,13 @@ Note: This implementation uses a simple Whisper fallback for reliable subtitle g
 The Parakeet model requires NVIDIA NeMo toolkit for full support.
 """
 
-import os
-from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Any, Optional
 import numpy as np
 
 from app.models.transcription import TranscriptionResult, TranscriptionSegment
 
 # Model cache
-PARAKEET_MODEL_CACHE: Dict[str, Any] = {}
+PARAKEET_MODEL_CACHE: dict[str, Any] = {}
 
 
 def load_parakeet_model(model_name: Optional[str] = None) -> Any:
@@ -37,10 +35,7 @@ def load_parakeet_model(model_name: Optional[str] = None) -> Any:
         # Load small model for balance of speed and accuracy
         model = whisper.load_model("small", device="cpu")
 
-        PARAKEET_MODEL_CACHE[cache_key] = {
-            "model": model,
-            "type": "whisper"
-        }
+        PARAKEET_MODEL_CACHE[cache_key] = {"model": model, "type": "whisper"}
         return PARAKEET_MODEL_CACHE[cache_key]
 
     except Exception as e:
@@ -58,7 +53,7 @@ def preprocess_audio(audio_path: str, target_sample_rate: int = 16000) -> np.nda
     import soundfile as sf
     from scipy import signal
 
-    audio, sample_rate = sf.read(audio_path, dtype='float32')
+    audio, sample_rate = sf.read(audio_path, dtype="float32")
 
     if len(audio.shape) > 1:
         audio = audio.mean(axis=1)
@@ -75,7 +70,7 @@ def transcribe_with_parakeet(
     language: Optional[str] = None,
     model_name: Optional[str] = None,
     chunk_length: float = 30.0,
-    return_timestamps: bool = True
+    return_timestamps: bool = True,
 ) -> TranscriptionResult:
     """
     Transcribe audio file using Whisper for reliable subtitle generation.
@@ -94,7 +89,7 @@ def transcribe_with_parakeet(
     model = pipeline["model"]
 
     # Transcribe with word-level timestamps
-    options = {
+    options: dict[str, Any] = {
         "word_timestamps": True,
         "verbose": False,
     }
@@ -105,7 +100,7 @@ def transcribe_with_parakeet(
     result = model.transcribe(audio_path, **options)
 
     # Parse segments from result
-    segments = []
+    segments: list[TranscriptionSegment] = []
     full_text = result.get("text", "").strip()
 
     for i, seg in enumerate(result.get("segments", [])):
@@ -113,7 +108,7 @@ def transcribe_with_parakeet(
             id=i,
             start=seg.get("start", 0),
             end=seg.get("end", 0),
-            text=seg.get("text", "").strip()
+            text=seg.get("text", "").strip(),
         )
         segments.append(segment)
 
@@ -121,18 +116,16 @@ def transcribe_with_parakeet(
     if not segments and full_text:
         # Try to get duration from audio file
         import soundfile as sf
-        _, sample_rate = sf.read(audio_path)
+
+        sf.read(audio_path)
         duration = len(full_text) / 10  # Rough estimate
-        segments.append(TranscriptionSegment(
-            id=0,
-            start=0,
-            end=duration,
-            text=full_text
-        ))
+        segments.append(
+            TranscriptionSegment(id=0, start=0, end=duration, text=full_text)
+        )
 
     return TranscriptionResult(
         text=full_text,
         language=language or result.get("language", "auto-detected"),
         segments=segments,
-        model_type="parakeet"  # Report as parakeet type for frontend
+        model_type="parakeet",  # Report as parakeet type for frontend
     )

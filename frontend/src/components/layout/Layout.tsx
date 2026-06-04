@@ -1,19 +1,19 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from "react-router-dom";
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: 'DB' },
-  { to: '/editor', label: 'Live Editor', icon: 'LE' },
-  { to: '/studio', label: 'Dubbing Studio', icon: 'DS' },
-  { to: '/archive', label: 'Archive', icon: 'AR' },
-  { to: '/status', label: 'AI Status', icon: 'AI' },
+  { to: "/", label: "Dashboard", icon: "DB" },
+  { to: "/editor", label: "Live Editor", icon: "LE" },
+  { to: "/studio", label: "Dubbing Studio", icon: "DS" },
+  { to: "/archive", label: "Archive", icon: "AR" },
+  { to: "/status", label: "AI Status", icon: "AI" },
 ];
 
 const pageTitles: Record<string, string> = {
-  '/': 'Project Dashboard',
-  '/editor': 'Live Editor',
-  '/studio': 'Dubbing Studio',
-  '/archive': 'Archive',
-  '/status': 'AI Status',
+  "/": "Project Dashboard",
+  "/editor": "Live Editor",
+  "/studio": "Dubbing Studio",
+  "/archive": "Archive",
+  "/status": "AI Status",
 };
 
 function Sidebar() {
@@ -29,8 +29,10 @@ function Sidebar() {
           <NavLink
             key={item.to}
             to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) => `studio-nav-item ${isActive ? 'active' : ''}`}
+            end={item.to === "/"}
+            className={({ isActive }) =>
+              `studio-nav-item ${isActive ? "active" : ""}`
+            }
           >
             <span className="nav-glyph">{item.icon}</span>
             <span>{item.label}</span>
@@ -43,7 +45,9 @@ function Sidebar() {
           <span className="nav-glyph">+</span>
           New Project
         </NavLink>
-        <div className="sidebar-meta">Powered by Whisper, Parakeet TDT, and Supertonic 3.</div>
+        <div className="sidebar-meta">
+          Powered by Whisper, Parakeet TDT, and Supertonic 3.
+        </div>
       </div>
     </aside>
   );
@@ -55,7 +59,7 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
-  const title = pageTitles[location.pathname] || 'AI Transcription Agent';
+  const title = pageTitles[location.pathname] || "AI Transcription Agent";
 
   return (
     <div className="studio-shell">
@@ -64,21 +68,16 @@ export function Layout({ children }: LayoutProps) {
         <header className="studio-topbar">
           <div className="topbar-left">
             <strong>{title}</strong>
-            <nav className="topbar-tabs" aria-label="Secondary navigation">
-              <span className="topbar-tab active">Projects</span>
-              <span className="topbar-tab">Models</span>
-              <span className="topbar-tab">API</span>
-            </nav>
+            <nav
+              className="topbar-tabs"
+              aria-label="Secondary navigation"
+            ></nav>
           </div>
           <div className="topbar-right">
             <label className="search-control">
               <span>Search</span>
               <input type="search" placeholder="Search tasks..." />
             </label>
-            <div className="status-pill">
-              <span className="status-dot" />
-              Systems Nominal
-            </div>
           </div>
         </header>
         <main className="studio-content">{children}</main>

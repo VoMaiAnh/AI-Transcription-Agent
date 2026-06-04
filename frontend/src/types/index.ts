@@ -6,7 +6,7 @@
 export interface STTModel {
   id: string;
   name: string;
-  type: 'whisper' | 'parakeet';
+  type: "whisper" | "parakeet";
   description: string;
 }
 
@@ -24,7 +24,7 @@ export interface TTSModel {
   description: string;
   sample_rate: number;
   languages: string[];
-  model_family?: 'supertonic';
+  model_family?: "supertonic";
   supports_instructions?: boolean;
   supports_voice_presets?: boolean;
   requires_reference_audio?: boolean;
@@ -35,7 +35,7 @@ export interface TTSVoice {
   id: string;
   name: string;
   language: string;
-  model_family?: 'supertonic' | 'all';
+  model_family?: "supertonic" | "all";
   description?: string;
   native_language?: string;
 }
@@ -62,7 +62,7 @@ export interface TranscriptionResult {
   text: string;
   language: string | null;
   segments: TranscriptionSegment[];
-  model_type: 'whisper' | 'parakeet';
+  model_type: "whisper" | "parakeet";
 }
 
 export interface TranscriptionResponse {
@@ -74,7 +74,7 @@ export interface TranscriptionResponse {
   segments: TranscriptionSegment[];
   time_taken: number;
   model_used: string;
-  model_type: 'whisper' | 'parakeet';
+  model_type: "whisper" | "parakeet";
   is_video: boolean;
 }
 
@@ -84,8 +84,11 @@ export interface TranscriptionInfo {
   result: TranscriptionResult;
   created_at: string;
   is_video: boolean;
+  source_size?: number;
+  subtitle_paths?: Record<string, string>;
+  media_paths?: Record<string, string>;
   model_used: string;
-  model_type: 'whisper' | 'parakeet';
+  model_type: "whisper" | "parakeet";
   time_taken: number;
 }
 
@@ -98,7 +101,7 @@ export interface TTSRequest {
   pitch?: number;
   language?: string | null;
   instruction?: string | null;
-  output_format?: 'wav' | 'mp3';
+  output_format?: "wav" | "mp3";
 }
 
 export interface TTSCacheEntry {
