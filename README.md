@@ -1,9 +1,10 @@
 ﻿# SYNCRA - AI Media Studio 
 
-<img width="1672" height="941" alt="Logo2_long" src="https://github.com/user-attachments/assets/c04827c7-e05f-445b-861c-cc97a81400b1" />
+<img width="800" height="600" alt="Logo2_long" src="https://github.com/user-attachments/assets/c04827c7-e05f-445b-861c-cc97a81400b1" />
 
 An AI-powered audio/video transcription and text-to-speech application using Whisper, Parakeet TDT, and Supertonic 3. This tool converts audio and video files into accurate text transcriptions and can synthesize on-device preset voices from text.
-<img width="1908" height="906" alt="Captura de pantalla 2026-03-03 232938" src="https://github.com/user-attachments/assets/f9f842a5-097c-40cc-95ad-856908daa4c9" />
+<img width="955" height="468" alt="Captura de pantalla 2026-06-07 104000" src="https://github.com/user-attachments/assets/5f498794-d1b3-4841-b3c6-d356871e54c5" />
+
 
 ## Features
 
