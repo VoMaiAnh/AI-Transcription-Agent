@@ -1,295 +1,496 @@
 """
-TTS (Text-to-Speech) service for text to audio synthesis
+TTS (Text-to-Speech) service for text to audio synthesis.
 """
 
+import json
 import os
 import uuid
-import tempfile
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, TypedDict, cast
 
 import numpy as np
 import scipy.io.wavfile as wavfile
-import torch
 
 from app.config import settings
 from app.models.tts import (
+    TTSCacheEntry,
     TTSModelInfo,
     TTSVoiceInfo,
-    TTSCacheEntry,
 )
 
 
-# TTS Models configuration
-QWEN3_TTS_MODELS = {
-    "qwen3-tts-0.6b": {
-        "name": "Qwen3-TTS-0.6B",
-        "description": "Lightweight TTS model, fast inference",
-        "sample_rate": 24000,
-        "languages": ["zh", "en"],
-    },
-    "qwen3-tts-1.8b": {
-        "name": "Qwen3-TTS-1.8B",
-        "description": "Standard TTS model, balanced quality and speed",
-        "sample_rate": 24000,
-        "languages": ["zh", "en"],
-    },
-    "qwen3-tts-4b": {
-        "name": "Qwen3-TTS-4B",
-        "description": "High-quality TTS model, best voice quality",
-        "sample_rate": 24000,
-        "languages": ["zh", "en"],
-    },
-    "cosyvoice-300m": {
-        "name": "CosyVoice-300M",
-        "description": "CosyVoice model for natural speech synthesis",
-        "sample_rate": 22050,
-        "languages": ["zh", "en"],
-    },
-    "cosyvoice-300m-sft": {
-        "name": "CosyVoice-300M-SFT",
-        "description": "CosyVoice SFT model with fine-tuned voices",
-        "sample_rate": 22050,
-        "languages": ["zh", "en"],
-    },
-    "cosyvoice-300m-instruct": {
-        "name": "CosyVoice-300M-Instruct",
-        "description": "CosyVoice Instruct model for controllable synthesis",
-        "sample_rate": 22050,
-        "languages": ["zh", "en"],
+DEFAULT_TTS_MODEL = "Supertone/supertonic-3"
+DEFAULT_TTS_VOICE = "M1"
+DEFAULT_TTS_LANGUAGE = "en"
+SUPERTONIC_SAMPLE_RATE = 44100
+SUPERTONIC_TOTAL_STEPS = 8
+
+
+class TTSModelConfig(TypedDict):
+    """Static metadata for a supported TTS model."""
+
+    name: str
+    description: str
+    sample_rate: int
+    languages: list[str]
+    model_family: str
+    supports_instructions: bool
+    supports_voice_presets: bool
+    requires_reference_audio: bool
+    features: list[str]
+
+
+class TTSVoiceConfig(TypedDict):
+    """Static metadata for a supported TTS voice."""
+
+    name: str
+    language: str
+    model_family: str
+    description: str
+    native_language: str
+
+
+class TTSModelRuntime(TypedDict):
+    """Loaded TTS backend and its metadata."""
+
+    model: Any
+    config: TTSModelConfig
+    family: str
+    loaded: bool
+
+
+SUPERTONIC_LANGUAGES = [
+    "en",
+    "ko",
+    "ja",
+    "ar",
+    "bg",
+    "cs",
+    "da",
+    "de",
+    "el",
+    "es",
+    "et",
+    "fi",
+    "fr",
+    "hi",
+    "hr",
+    "hu",
+    "id",
+    "it",
+    "lt",
+    "lv",
+    "nl",
+    "pl",
+    "pt",
+    "ro",
+    "ru",
+    "sk",
+    "sl",
+    "sv",
+    "tr",
+    "uk",
+    "vi",
+    "na",
+]
+
+LANGUAGE_ALIASES = {
+    "auto": "na",
+    "unknown": "na",
+    "fallback": "na",
+    "eng": "en",
+    "english": "en",
+    "kor": "ko",
+    "korean": "ko",
+    "jpn": "ja",
+    "japanese": "ja",
+    "ara": "ar",
+    "arabic": "ar",
+    "bulgarian": "bg",
+    "czech": "cs",
+    "danish": "da",
+    "deu": "de",
+    "ger": "de",
+    "german": "de",
+    "greek": "el",
+    "spa": "es",
+    "spanish": "es",
+    "estonian": "et",
+    "finnish": "fi",
+    "fra": "fr",
+    "fre": "fr",
+    "french": "fr",
+    "hin": "hi",
+    "hindi": "hi",
+    "croatian": "hr",
+    "hungarian": "hu",
+    "indonesian": "id",
+    "italian": "it",
+    "lithuanian": "lt",
+    "latvian": "lv",
+    "dutch": "nl",
+    "polish": "pl",
+    "por": "pt",
+    "portuguese": "pt",
+    "romanian": "ro",
+    "rus": "ru",
+    "russian": "ru",
+    "slovak": "sk",
+    "slovenian": "sl",
+    "swedish": "sv",
+    "turkish": "tr",
+    "ukrainian": "uk",
+    "vietnamese": "vi",
+}
+
+SUPERTONIC_VOICES = ["M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5"]
+
+TTS_MODELS: dict[str, TTSModelConfig] = {
+    DEFAULT_TTS_MODEL: {
+        "name": "Supertonic 3",
+        "description": "Lightning-fast on-device multilingual TTS using ONNX Runtime.",
+        "sample_rate": SUPERTONIC_SAMPLE_RATE,
+        "languages": SUPERTONIC_LANGUAGES,
+        "model_family": "supertonic",
+        "supports_instructions": False,
+        "supports_voice_presets": True,
+        "requires_reference_audio": False,
+        "features": [
+            "31 language codes plus unknown-language fallback",
+            "Built-in voice styles M1-M5 and F1-F5",
+            "ONNX Runtime local inference with no cloud call",
+            "Expression tags such as <laugh>, <breath>, and <sigh>",
+        ],
     },
 }
 
-# Available voice options
-VOICE_OPTIONS = {
-    "default": {"name": "Default", "language": "auto"},
-    "male-1": {"name": "Male Voice 1", "language": "zh"},
-    "male-2": {"name": "Male Voice 2", "language": "zh"},
-    "female-1": {"name": "Female Voice 1", "language": "zh"},
-    "female-2": {"name": "Female Voice 2", "language": "zh"},
-    "english-male": {"name": "English Male", "language": "en"},
-    "english-female": {"name": "English Female", "language": "en"},
+VOICE_OPTIONS: dict[str, TTSVoiceConfig] = {
+    voice_id: {
+        "name": f"Supertonic {voice_id}",
+        "language": "multilingual",
+        "model_family": "supertonic",
+        "description": "Built-in Supertonic 3 voice style",
+        "native_language": "Multilingual",
+    }
+    for voice_id in SUPERTONIC_VOICES
 }
 
-# Device detection
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-# In-memory cache for TTS results
-tts_cache = {}
-
-# Model cache
-TTS_MODEL_CACHE = {}
+tts_cache: dict[str, TTSCacheEntry] = {}
+TTS_INDEX_PATH = settings.upload_dir / "tts_index.json"
+TTS_MODEL_CACHE: dict[str, TTSModelRuntime] = {}
 
 
-def load_tts_model(model_name: str):
-    """
-    Load TTS model by name.
-    Supports Qwen3-TTS and CosyVoice models.
+class TTSBackendUnavailableError(RuntimeError):
+    """Raised when a configured TTS backend is not installed or configured."""
 
-    Args:
-        model_name: Name of the TTS model to load
 
-    Returns:
-        Loaded model data
+def persist_tts_cache() -> None:
+    """Persist TTS metadata so Archive survives backend restarts."""
+    TTS_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = TTS_INDEX_PATH.with_suffix(".tmp")
+    tmp_path.write_text(
+        json.dumps(
+            [entry.model_dump() for entry in tts_cache.values()],
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    tmp_path.replace(TTS_INDEX_PATH)
 
-    Raises:
-        HTTPException: If model loading fails
-    """
+
+def load_tts_cache() -> None:
+    """Load persisted TTS metadata, falling back to saved WAV/MP3 files."""
+    tts_cache.clear()
+
+    if TTS_INDEX_PATH.exists():
+        try:
+            entries = json.loads(TTS_INDEX_PATH.read_text(encoding="utf-8"))
+            for entry in entries:
+                if isinstance(entry, dict) and entry.get("id"):
+                    tts_cache[entry["id"]] = TTSCacheEntry(**entry)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            tts_cache.clear()
+
+    recovered_any = False
+    for audio_path in settings.tts_output_dir.iterdir():
+        if not audio_path.is_file() or audio_path.suffix.lower() not in {
+            ".wav",
+            ".mp3",
+        }:
+            continue
+        tts_id = audio_path.stem
+        if tts_id in tts_cache:
+            continue
+        tts_cache[tts_id] = TTSCacheEntry(
+            id=tts_id,
+            text=f"Recovered TTS audio: {audio_path.name}",
+            model="Recovered from uploads",
+            voice="unknown",
+            speed=1.0,
+            pitch=1.0,
+            language=None,
+            instruction=None,
+            duration=0,
+            sample_rate=0,
+            created_at=datetime.fromtimestamp(audio_path.stat().st_mtime).isoformat(),
+        )
+        recovered_any = True
+
+    if recovered_any or not TTS_INDEX_PATH.exists():
+        persist_tts_cache()
+
+
+def normalize_language_code(language: Optional[str]) -> str:
+    """Normalize user-facing language input into a Supertonic language code."""
+    normalized = (language or "").strip().lower()
+    if not normalized:
+        return DEFAULT_TTS_LANGUAGE
+    normalized = LANGUAGE_ALIASES.get(normalized, normalized)
+    return normalized if normalized in SUPERTONIC_LANGUAGES else "na"
+
+
+def detect_language(text: str) -> str:
+    """Best-effort language detection for choosing a Supertonic language code."""
+    if any("\uac00" <= c <= "\ud7af" for c in text):
+        return "ko"
+    if any("\u3040" <= c <= "\u30ff" for c in text):
+        return "ja"
+    if any("\u4e00" <= c <= "\u9fff" for c in text):
+        return "na"
+    return DEFAULT_TTS_LANGUAGE
+
+
+def get_model_family(model_name: str) -> str:
+    """Return the voice preset family for a TTS model."""
+    model_config = TTS_MODELS.get(model_name)
+    return model_config["model_family"] if model_config else "supertonic"
+
+
+def default_voice_for_model(_model_name: str) -> str:
+    """Return the default speaker for the selected TTS model."""
+    return DEFAULT_TTS_VOICE
+
+
+def is_voice_compatible(model_name: str, voice: str) -> bool:
+    """Return whether a voice preset can be used with the selected model."""
+    return model_name == DEFAULT_TTS_MODEL and voice in VOICE_OPTIONS
+
+
+def load_tts_model(model_name: str) -> TTSModelRuntime:
+    """Load the Supertonic 3 TTS engine."""
     from fastapi import HTTPException
 
     if model_name in TTS_MODEL_CACHE:
         return TTS_MODEL_CACHE[model_name]
 
-    model_config = QWEN3_TTS_MODELS.get(model_name)
+    model_config = TTS_MODELS.get(model_name)
     if not model_config:
         raise HTTPException(status_code=400, detail=f"Unknown TTS model: {model_name}")
 
     try:
-        if "qwen3" in model_name:
-            # Qwen3-TTS model loading
-            from transformers import AutoModelForCausalLM, AutoTokenizer
+        try:
+            from supertonic import TTS
+        except ImportError as exc:
+            raise TTSBackendUnavailableError(
+                "Supertonic backend is not installed. Install it with "
+                "`pip install supertonic` or `pip install -r requirements.txt`, "
+                "restart the API, then try again."
+            ) from exc
 
-            model_path = f"Qwen/{model_name}"
-
-            # In production, uncomment below:
-            # tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-            # model = AutoModelForCausalLM.from_pretrained(
-            #     model_path,
-            #     torch_dtype=torch.float16 if DEVICE == "cuda" else torch.float32,
-            #     device_map="auto",
-            #     trust_remote_code=True
-            # )
-            # TTS_MODEL_CACHE[model_name] = {
-            #     "model": model,
-            #     "tokenizer": tokenizer,
-            #     "config": model_config,
-            #     "loaded": True
-            # }
-
-            # Placeholder for demo
-            TTS_MODEL_CACHE[model_name] = {
-                "model": None,
-                "tokenizer": None,
-                "config": model_config,
-                "loaded": True
-            }
-
-        elif "cosyvoice" in model_name:
-            # CosyVoice model loading
-            # from cosyvoice import CosyVoice
-            # cosyvoice = CosyVoice(model_name)
-            # TTS_MODEL_CACHE[model_name] = {
-            #     "model": cosyvoice,
-            #     "config": model_config,
-            #     "loaded": True
-            # }
-
-            # Placeholder for demo
-            TTS_MODEL_CACHE[model_name] = {
-                "model": None,
-                "config": model_config,
-                "loaded": True
-            }
-
+        model = TTS(auto_download=True)
+        TTS_MODEL_CACHE[model_name] = {
+            "model": model,
+            "config": model_config,
+            "family": "supertonic",
+            "loaded": True,
+        }
         return TTS_MODEL_CACHE[model_name]
 
-    except Exception as e:
+    except TTSBackendUnavailableError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
+    except Exception as exc:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to load TTS model: {str(e)}"
+            status_code=500, detail=f"Failed to load TTS model: {str(exc)}"
         )
 
 
-def detect_language(text: str) -> str:
-    """
-    Auto-detect language from text
+def _normalize_generated_audio(audio: object) -> np.ndarray:
+    """Convert model output to a 1-D float32 numpy array in -1..1 range."""
+    audio_array = cast(np.ndarray, np.asarray(audio))
+    if audio_array.ndim > 1:
+        audio_array = np.squeeze(audio_array)
+    if audio_array.ndim > 1:
+        audio_array = audio_array.reshape(-1)
 
-    Args:
-        text: Input text
+    if np.issubdtype(audio_array.dtype, np.integer):
+        max_value = float(np.iinfo(audio_array.dtype).max)
+        audio_array = audio_array.astype(np.float32) / max_value
+    else:
+        audio_array = audio_array.astype(np.float32)
 
-    Returns:
-        Language code ('zh' or 'en')
-    """
-    if any('\u4e00' <= c <= '\u9fff' for c in text):
-        return "zh"
-    return "en"
+    return np.nan_to_num(audio_array, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _duration_to_float(
+    duration: object, audio_array: np.ndarray, sample_rate: int
+) -> float:
+    """Normalize Supertonic duration output, falling back to audio length."""
+    try:
+        duration_value = float(np.asarray(duration).reshape(-1)[0])
+    except (TypeError, ValueError, IndexError):
+        duration_value = 0.0
+
+    if duration_value <= 0 and sample_rate > 0:
+        duration_value = float(audio_array.shape[0] / sample_rate)
+    return duration_value
+
+
+def _synthesize_with_supertonic(
+    model: Any,
+    text: str,
+    voice: str,
+    language: str,
+    speed: float,
+) -> tuple[np.ndarray, int, float]:
+    """Run Supertonic 3 inference."""
+    style = model.get_voice_style(voice_name=voice)
+    audio, duration = model.synthesize(
+        text=text,
+        voice_style=style,
+        lang=language,
+        speed=speed,
+        total_steps=SUPERTONIC_TOTAL_STEPS,
+    )
+    audio_array = _normalize_generated_audio(audio)
+    duration_seconds = _duration_to_float(duration, audio_array, SUPERTONIC_SAMPLE_RATE)
+    return audio_array, SUPERTONIC_SAMPLE_RATE, duration_seconds
 
 
 def synthesize_audio(
     text: str,
     model_name: str,
-    voice: str = "default",
+    voice: str = DEFAULT_TTS_VOICE,
     speed: float = 1.0,
     pitch: float = 1.0,
     language: Optional[str] = None,
-) -> tuple:
+    instruction: Optional[str] = None,
+) -> tuple[np.ndarray, int, float]:
     """
-    Synthesize speech from text using the specified TTS model.
+    Synthesize speech from text using Supertonic 3.
 
-    Args:
-        text: Text to synthesize
-        model_name: TTS model to use
-        voice: Voice to use
-        speed: Speech speed (0.5-2.0)
-        pitch: Pitch adjustment (0.5-2.0)
-        language: Language code (auto-detected if None)
-
-    Returns:
-        Tuple of (audio_array, sample_rate, duration_seconds)
-
-    Raises:
-        HTTPException: If synthesis fails
+    The pitch and instruction arguments are accepted for API compatibility but
+    are not treated as prompts by Supertonic.
     """
     from fastapi import HTTPException
 
-    model_data = load_tts_model(model_name)
-    model_config = model_data["config"]
-
-    # Determine language
-    if not language:
-        language = detect_language(text)
+    model_data = load_tts_model(model_name or DEFAULT_TTS_MODEL)
+    normalized_language = (
+        normalize_language_code(language) if language else detect_language(text)
+    )
+    normalized_voice = (voice or "").strip() or DEFAULT_TTS_VOICE
+    if not is_voice_compatible(model_name or DEFAULT_TTS_MODEL, normalized_voice):
+        normalized_voice = DEFAULT_TTS_VOICE
 
     try:
-        if model_data.get("loaded"):
-            # Placeholder implementation
-            # In production, use actual model inference:
-            # if "qwen3" in model_name:
-            #     audio = model_data["model"].tts(text, speaker=voice, speed=speed)
-            # elif "cosyvoice" in model_name:
-            #     audio = model_data["model"].inference_sft(text, voice)
-
-            sample_rate = model_config["sample_rate"]
-            duration = len(text) * 0.15 / speed  # Rough estimate
-            num_samples = int(sample_rate * duration)
-
-            # Generate placeholder audio (silence for demo)
-            audio_array = np.zeros(num_samples, dtype=np.float32)
-
-            return audio_array, sample_rate, duration
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"TTS synthesis failed: {str(e)}"
+        audio_array, sample_rate, duration = _synthesize_with_supertonic(
+            model=model_data["model"],
+            text=text,
+            voice=normalized_voice,
+            language=normalized_language,
+            speed=speed,
         )
+
+        if audio_array.size == 0:
+            raise HTTPException(
+                status_code=502, detail="TTS model returned an empty audio array."
+            )
+
+        peak = float(np.max(np.abs(audio_array)))
+        if peak < 0.001:
+            raise HTTPException(
+                status_code=502, detail="TTS model returned silent audio."
+            )
+        if peak > 1.0:
+            audio_array = audio_array / peak
+
+        if duration <= 0:
+            duration = float(audio_array.shape[0] / sample_rate)
+        if duration <= 0:
+            raise HTTPException(
+                status_code=502, detail="TTS model returned zero-duration audio."
+            )
+
+        return audio_array, sample_rate, duration
+
+    except TTSBackendUnavailableError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"TTS synthesis failed: {str(exc)}")
 
 
 def save_audio_to_file(
     audio_data: np.ndarray,
     sample_rate: int,
     tts_id: str,
-    output_format: str = "wav"
+    output_format: str = "wav",
 ) -> str:
-    """
-    Save audio data to file
-
-    Args:
-        audio_data: Audio data array
-        sample_rate: Sample rate in Hz
-        tts_id: Unique ID for the file
-        output_format: Output format (wav or mp3)
-
-    Returns:
-        Path to saved file
-    """
+    """Save audio data to a WAV or MP3 file."""
     output_dir = settings.tts_output_dir
     file_path = output_dir / f"{tts_id}.{output_format}"
+    safe_audio = np.nan_to_num(audio_data, nan=0.0, posinf=0.0, neginf=0.0)
+    if safe_audio.size == 0 or float(np.max(np.abs(safe_audio))) < 0.001:
+        raise ValueError("Cannot save empty or silent TTS audio")
+
+    pcm_audio = (np.clip(safe_audio, -1.0, 1.0) * 32767).astype(np.int16)
+    wav_path = output_dir / f"{tts_id}.wav"
+    wavfile.write(str(wav_path), sample_rate, pcm_audio)
 
     if output_format == "wav":
-        wavfile.write(str(file_path), sample_rate, (audio_data * 32767).astype(np.int16))
-    else:
-        # For MP3, we'd need additional processing
-        # For now, save as WAV and rename
-        wav_path = output_dir / f"{tts_id}.wav"
-        wavfile.write(str(wav_path), sample_rate, (audio_data * 32767).astype(np.int16))
-        if wav_path != file_path:
-            os.rename(wav_path, file_path)
+        return str(wav_path)
 
+    from pydub import AudioSegment
+
+    AudioSegment.from_file(wav_path, format="wav").export(file_path, format="mp3")
+    if wav_path != file_path:
+        try:
+            os.remove(wav_path)
+        except OSError:
+            pass
     return str(file_path)
 
 
 def get_available_models() -> list[TTSModelInfo]:
-    """Get list of available TTS models"""
+    """Get list of available TTS models."""
     return [
         TTSModelInfo(
             id=model_id,
             name=config["name"],
             description=config["description"],
             sample_rate=config["sample_rate"],
-            languages=config["languages"]
+            languages=config["languages"],
+            model_family=config["model_family"],
+            supports_instructions=config["supports_instructions"],
+            supports_voice_presets=config["supports_voice_presets"],
+            requires_reference_audio=config["requires_reference_audio"],
+            features=config["features"],
         )
-        for model_id, config in QWEN3_TTS_MODELS.items()
+        for model_id, config in TTS_MODELS.items()
     ]
 
 
 def get_available_voices() -> list[TTSVoiceInfo]:
-    """Get list of available voices"""
+    """Get list of available voices."""
     return [
         TTSVoiceInfo(
             id=voice_id,
             name=config["name"],
-            language=config["language"]
+            language=config["language"],
+            model_family=config["model_family"],
+            description=config["description"],
+            native_language=config["native_language"],
         )
         for voice_id, config in VOICE_OPTIONS.items()
     ]
@@ -297,95 +498,80 @@ def get_available_voices() -> list[TTSVoiceInfo]:
 
 async def process_tts(
     text: str,
-    model: str = "qwen3-tts-1.8b",
-    voice: str = "default",
+    model: str = DEFAULT_TTS_MODEL,
+    voice: str = DEFAULT_TTS_VOICE,
     speed: float = 1.0,
     pitch: float = 1.0,
     language: Optional[str] = None,
-    output_format: str = "wav"
-) -> tuple:
-    """
-    Process TTS request
-
-    Args:
-        text: Text to synthesize
-        model: TTS model to use
-        voice: Voice to use
-        speed: Speech speed
-        pitch: Pitch adjustment
-        language: Language code
-        output_format: Output format
-
-    Returns:
-        Tuple of (tts_id, audio_bytes, duration, sample_rate)
-
-    Raises:
-        HTTPException: If processing fails
-    """
+    instruction: Optional[str] = None,
+    output_format: str = "wav",
+) -> tuple[str, bytes, float, int]:
+    """Process a TTS request."""
     from fastapi import HTTPException
 
-    # Validate inputs
-    if len(text) > 5000:
+    normalized_text = (text or "").strip()
+    if not normalized_text:
         raise HTTPException(
-            status_code=400,
-            detail="Text too long. Maximum 5000 characters."
+            status_code=400, detail="Text is required for TTS synthesis."
         )
 
-    if speed < 0.5 or speed > 2.0:
+    if len(normalized_text) > 5000:
         raise HTTPException(
-            status_code=400,
-            detail="Speed must be between 0.5 and 2.0"
+            status_code=400, detail="Text too long. Maximum 5000 characters."
         )
+
+    if speed < 0.7 or speed > 2.0:
+        raise HTTPException(status_code=400, detail="Speed must be between 0.7 and 2.0")
 
     if pitch < 0.5 or pitch > 2.0:
-        raise HTTPException(
-            status_code=400,
-            detail="Pitch must be between 0.5 and 2.0"
-        )
+        raise HTTPException(status_code=400, detail="Pitch must be between 0.5 and 2.0")
 
-    if model not in QWEN3_TTS_MODELS:
+    if model not in TTS_MODELS:
         raise HTTPException(status_code=400, detail=f"Unknown model: {model}")
 
-    if voice not in VOICE_OPTIONS:
-        raise HTTPException(status_code=400, detail=f"Unknown voice: {voice}")
+    normalized_language = normalize_language_code(language)
+    normalized_voice = (voice or "").strip() or DEFAULT_TTS_VOICE
+    if not is_voice_compatible(model, normalized_voice):
+        normalized_voice = DEFAULT_TTS_VOICE
 
-    # Generate unique ID
     tts_id = str(uuid.uuid4())
 
-    # Synthesize speech
     audio_data, sample_rate, duration = synthesize_audio(
-        text=text,
+        text=normalized_text,
         model_name=model,
-        voice=voice,
+        voice=normalized_voice,
         speed=speed,
         pitch=pitch,
-        language=language,
+        language=normalized_language,
+        instruction=instruction,
     )
 
-    # Save to file
     file_path = save_audio_to_file(
         audio_data=audio_data,
         sample_rate=sample_rate,
         tts_id=tts_id,
-        output_format=output_format
+        output_format=output_format,
     )
 
-    # Read file bytes
-    with open(file_path, "rb") as f:
-        audio_bytes = f.read()
+    with open(file_path, "rb") as audio_file:
+        audio_bytes = audio_file.read()
 
-    # Cache the result
     tts_cache[tts_id] = TTSCacheEntry(
         id=tts_id,
-        text=text,
+        text=normalized_text,
         model=model,
-        voice=voice,
+        voice=normalized_voice,
         speed=speed,
         pitch=pitch,
-        language=language,
+        language=normalized_language,
+        instruction=None,
         duration=duration,
         sample_rate=sample_rate,
-        created_at=datetime.now().isoformat()
+        created_at=datetime.now().isoformat(),
     )
+    persist_tts_cache()
 
     return tts_id, audio_bytes, duration, sample_rate
+
+
+load_tts_cache()

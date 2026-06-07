@@ -6,7 +6,7 @@
 export interface STTModel {
   id: string;
   name: string;
-  type: 'whisper' | 'qwen3-asr' | 'parakeet';
+  type: "whisper" | "parakeet";
   description: string;
 }
 
@@ -14,8 +14,31 @@ export interface STTModelsResponse {
   models: STTModel[];
   default_model: string;
   default_whisper: string;
-  default_qwen3_asr: string;
   default_parakeet?: string;
+}
+
+// Translation Models
+export interface TranslationLanguage {
+  code: string;
+  name: string;
+  nllb_code: string;
+  tts_supported: boolean;
+}
+
+export interface TranslationModel {
+  id: string;
+  name: string;
+  description: string;
+  device: string;
+  compute_type: string;
+  languages: TranslationLanguage[];
+}
+
+export interface TranslationModelsResponse {
+  models: TranslationModel[];
+  default_model: string;
+  default_source_language: string;
+  default_target_language: string;
 }
 
 // TTS Models
@@ -25,12 +48,20 @@ export interface TTSModel {
   description: string;
   sample_rate: number;
   languages: string[];
+  model_family?: "supertonic";
+  supports_instructions?: boolean;
+  supports_voice_presets?: boolean;
+  requires_reference_audio?: boolean;
+  features?: string[];
 }
 
 export interface TTSVoice {
   id: string;
   name: string;
   language: string;
+  model_family?: "supertonic" | "all";
+  description?: string;
+  native_language?: string;
 }
 
 export interface TTSModelsResponse {
@@ -55,7 +86,22 @@ export interface TranscriptionResult {
   text: string;
   language: string | null;
   segments: TranscriptionSegment[];
-  model_type: 'whisper' | 'qwen3-asr' | 'parakeet';
+  model_type: "whisper" | "parakeet";
+}
+
+export interface TranslationResult {
+  language: string;
+  source_language: string | null;
+  model: string;
+  text: string;
+  segments: TranscriptionSegment[];
+  created_at: string;
+  tts_audio_path?: string | null;
+  tts_voice?: string | null;
+  tts_model?: string | null;
+  tts_speed?: number | null;
+  tts_duration?: number | null;
+  tts_sample_rate?: number | null;
 }
 
 export interface TranscriptionResponse {
@@ -67,7 +113,7 @@ export interface TranscriptionResponse {
   segments: TranscriptionSegment[];
   time_taken: number;
   model_used: string;
-  model_type: 'whisper' | 'qwen3-asr' | 'parakeet';
+  model_type: "whisper" | "parakeet";
   is_video: boolean;
 }
 
@@ -77,8 +123,12 @@ export interface TranscriptionInfo {
   result: TranscriptionResult;
   created_at: string;
   is_video: boolean;
+  source_size?: number;
+  subtitle_paths?: Record<string, string>;
+  media_paths?: Record<string, string>;
+  translations?: Record<string, TranslationResult>;
   model_used: string;
-  model_type: 'whisper' | 'qwen3-asr' | 'parakeet';
+  model_type: "whisper" | "parakeet";
   time_taken: number;
 }
 
@@ -90,7 +140,8 @@ export interface TTSRequest {
   speed?: number;
   pitch?: number;
   language?: string | null;
-  output_format?: 'wav' | 'mp3';
+  instruction?: string | null;
+  output_format?: "wav" | "mp3";
 }
 
 export interface TTSCacheEntry {
@@ -101,6 +152,7 @@ export interface TTSCacheEntry {
   speed: number;
   pitch: number;
   language: string | null;
+  instruction?: string | null;
   duration: number;
   sample_rate: number;
   created_at: string;
@@ -116,7 +168,6 @@ export interface HealthResponse {
   };
   stt: {
     default_whisper: string;
-    default_qwen3_asr: string;
     default_parakeet?: string;
     available_models: string[];
   };

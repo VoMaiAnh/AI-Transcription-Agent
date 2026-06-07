@@ -11,9 +11,12 @@ soundfile==0.12.1
 
 # STT/LLM models
 torch>=2.2.0
-transformers>=4.57.6
 openai-whisper>=20231117
-qwen-asr
+supertonic
+ctranslate2
+transformers>=4.41,<5
+sentencepiece
+huggingface-hub
 
 # Parakeet TDT (CPU-friendly ONNX inference)
 optimum[onnxruntime]>=1.20.0
@@ -29,3 +32,4 @@ aiofiles>=23.2.1
 scipy>=1.10.0
 pytest>=8.0.0
 httpx>=0.26.0
+pre-commit>=4.0.0

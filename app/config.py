@@ -2,7 +2,6 @@
 Application configuration using pydantic-settings
 """
 
-import os
 from pathlib import Path
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,10 +11,7 @@ class Settings(BaseSettings):
     """Application settings"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
 
     # Application settings
@@ -30,11 +26,13 @@ class Settings(BaseSettings):
     # STT Model settings
     STT_MODEL: str = "base"
     WHISPER_MODEL: str = "base"
-    QWEN3_ASR_MODEL: str = "Qwen/Qwen3-ASR-1.7B"
     PARAKEET_MODEL: str = "nvidia/parakeet-tdt-0.6b-v3"
 
     # TTS Model settings
-    TTS_MODEL: str = "qwen3-tts-1.8b"
+    TTS_MODEL: str = "Supertone/supertonic-3"
+
+    # Translation Model settings
+    TRANSLATION_MODEL: str = "JustFrederik/nllb-200-distilled-600M-ct2-int8"
 
     # Device settings
     DEVICE: str = "cpu"  # Will be overridden by torch.cuda.is_available()
@@ -51,7 +49,7 @@ class Settings(BaseSettings):
 
     @field_validator("DEBUG", mode="before")
     @classmethod
-    def parse_debug_flag(cls, value):
+    def parse_debug_flag(cls, value: object) -> object:
         """Accept common deployment words for DEBUG in addition to booleans."""
         if isinstance(value, str):
             normalized = value.strip().lower()

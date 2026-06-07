@@ -6,14 +6,10 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 
-def safe_remove_file(
-    file_path: str,
-    max_retries: int = 3,
-    delay: float = 0.5
-) -> bool:
+def safe_remove_file(file_path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
     """
     Safely remove a file with retries (for Windows file locking issues)
 
@@ -37,7 +33,9 @@ def safe_remove_file(
             if attempt < max_retries - 1:
                 time.sleep(delay)
             else:
-                print(f"Warning: Could not remove file {path} after {max_retries} attempts")
+                print(
+                    f"Warning: Could not remove file {path} after {max_retries} attempts"
+                )
                 return False
 
     return False
@@ -66,11 +64,12 @@ def format_file_size(size_bytes: int) -> str:
     Returns:
         Formatted size string (e.g., "1.5 MB")
     """
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.2f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.2f} PB"
+    size = float(size_bytes)
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if size < 1024.0:
+            return f"{size:.2f} {unit}"
+        size /= 1024.0
+    return f"{size:.2f} PB"
 
 
 def get_file_extension(filename: str) -> str:
@@ -111,9 +110,7 @@ def sanitize_filename(filename: Optional[str], fallback: str = "upload") -> str:
 
 
 def generate_unique_filename(
-    prefix: str,
-    extension: str,
-    include_timestamp: bool = True
+    prefix: str, extension: str, include_timestamp: bool = True
 ) -> str:
     """
     Generate a unique filename
@@ -152,10 +149,8 @@ def ensure_directory(directory: str) -> Path:
 
 
 def list_files(
-    directory: str,
-    extensions: Optional[List[str]] = None,
-    recursive: bool = False
-) -> List[Path]:
+    directory: str, extensions: Optional[list[str]] = None, recursive: bool = False
+) -> list[Path]:
     """
     List files in directory
 
@@ -179,8 +174,10 @@ def list_files(
 
     # Filter by extension if specified
     if extensions:
-        extensions = [ext.lower() if ext.startswith('.') else f'.{ext.lower()}'
-                      for ext in extensions]
+        extensions = [
+            ext.lower() if ext.startswith(".") else f".{ext.lower()}"
+            for ext in extensions
+        ]
         files = [f for f in files if f.suffix.lower() in extensions]
 
     return files

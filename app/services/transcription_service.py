@@ -2,11 +2,13 @@
 Transcription service for audio/video to text conversion
 """
 
+import json
 import os
+import re
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Literal, Optional, TypedDict
 
 import torch
 import whisper
@@ -20,51 +22,50 @@ from app.models.transcription import (
 )
 from app.utils.file_utils import sanitize_filename
 
+ModelType = Literal["whisper", "parakeet"]
+
+
+class STTModelConfig(TypedDict):
+    """Static metadata for a supported transcription model."""
+
+    type: ModelType
+    name: str
+    description: str
+
 
 # STT Models configuration
-STT_MODELS = {
+STT_MODELS: dict[str, STTModelConfig] = {
     # Whisper models
     "whisper-tiny": {
         "type": "whisper",
         "name": "Whisper Tiny",
-        "description": "Fastest, lowest accuracy"
+        "description": "Fastest, lowest accuracy",
     },
     "whisper-base": {
         "type": "whisper",
         "name": "Whisper Base",
-        "description": "Fast, decent accuracy"
+        "description": "Fast, decent accuracy",
     },
     "whisper-small": {
         "type": "whisper",
         "name": "Whisper Small",
-        "description": "Balanced speed and accuracy"
+        "description": "Balanced speed and accuracy",
     },
     "whisper-medium": {
         "type": "whisper",
         "name": "Whisper Medium",
-        "description": "Good accuracy, slower"
+        "description": "Good accuracy, slower",
     },
     "whisper-large": {
         "type": "whisper",
         "name": "Whisper Large",
-        "description": "Best accuracy, slowest"
-    },
-    # Qwen3-ASR models
-    "qwen3-asr-0.6b": {
-        "type": "qwen3-asr",
-        "name": "Qwen3-ASR-0.6B",
-        "description": "Lightweight ASR, 30+ languages, streaming support"
-    },
-    "qwen3-asr-1.7b": {
-        "type": "qwen3-asr",
-        "name": "Qwen3-ASR-1.7B",
-        "description": "Standard ASR, 30+ languages + 22 Chinese dialects"
+        "description": "Best accuracy, slowest",
     },
     # Parakeet TDT models (CPU-optimized)
     "parakeet-tdt-0.6b": {
         "type": "parakeet",
         "name": "Parakeet TDT 0.6B v3",
-        "description": "NVIDIA Parakeet, 24+ languages, precise timestamps, CPU-friendly"
+        "description": "NVIDIA Parakeet, 24+ languages, precise timestamps, CPU-friendly",
     },
 }
 
@@ -72,17 +73,157 @@ STT_MODELS = {
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Model caches
-MODEL_CACHE = {}
-QWEN3_ASR_CACHE = {}
-PARAKEET_MODEL_CACHE = {}
+MODEL_CACHE: dict[str, Any] = {}
+PARAKEET_MODEL_CACHE: dict[str, Any] = {}
 
 # In-memory storage for transcription results
-transcription_cache = {}
+transcription_cache: dict[str, dict[str, Any]] = {}
+TRANSCRIPTION_INDEX_PATH = settings.upload_dir / "transcriptions_index.json"
 
-ALLOWED_AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac'}
-ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.mov', '.mkv', '.webm', '.avi'}
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac"}
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
 ALLOWED_EXTENSIONS = ALLOWED_AUDIO_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS
 UPLOAD_CHUNK_SIZE = 1024 * 1024
+UUID_PREFIX_RE = re.compile(
+    r"^(?P<id>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})_(?P<filename>.+)$"
+)
+
+
+def _parse_subtitle_timestamp(value: str) -> float:
+    """Parse SRT/VTT timestamp text into seconds."""
+    timestamp = value.strip().replace(",", ".")
+    hours, minutes, seconds = timestamp.split(":")
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
+def _parse_subtitle_segments(path: Path) -> list[dict[str, Any]]:
+    """Best-effort parser for saved SRT/VTT files."""
+    if not path.exists():
+        return []
+
+    blocks = re.split(
+        r"\n\s*\n", path.read_text(encoding="utf-8", errors="ignore").strip()
+    )
+    segments: list[dict[str, Any]] = []
+
+    for block in blocks:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if not lines or lines[0].upper() == "WEBVTT":
+            continue
+
+        timestamp_index = next((i for i, line in enumerate(lines) if "-->" in line), -1)
+        if timestamp_index < 0:
+            continue
+
+        start_text, end_text = lines[timestamp_index].split("-->", 1)
+        end_text = end_text.split()[0]
+        text = " ".join(lines[timestamp_index + 1 :]).strip()
+
+        if not text:
+            continue
+
+        try:
+            segments.append(
+                {
+                    "id": len(segments),
+                    "start": _parse_subtitle_timestamp(start_text),
+                    "end": _parse_subtitle_timestamp(end_text),
+                    "text": text,
+                }
+            )
+        except (ValueError, IndexError):
+            continue
+
+    return segments
+
+
+def persist_transcription_cache() -> None:
+    """Persist transcription metadata so Archive survives backend restarts."""
+    TRANSCRIPTION_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = TRANSCRIPTION_INDEX_PATH.with_suffix(".tmp")
+    tmp_path.write_text(
+        json.dumps(list(transcription_cache.values()), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    tmp_path.replace(TRANSCRIPTION_INDEX_PATH)
+
+
+def _recover_transcription_from_source(
+    source_path: Path,
+) -> Optional[dict[str, Any]]:
+    """Rebuild a basic transcription record from retained media and subtitle files."""
+    match = UUID_PREFIX_RE.match(source_path.name)
+    if not match:
+        return None
+
+    transcription_id = match.group("id")
+    filename = match.group("filename")
+    file_extension = source_path.suffix.lower()
+    is_video = file_extension in ALLOWED_VIDEO_EXTENSIONS
+
+    subtitle_paths: dict[str, str] = {}
+    segments: list[dict[str, Any]] = []
+    for subtitle_path in sorted(
+        settings.subtitle_output_dir.glob(f"{transcription_id}_*")
+    ):
+        subtitle_extension = subtitle_path.suffix.lower().lstrip(".")
+        if subtitle_extension in {"srt", "vtt"}:
+            subtitle_paths[subtitle_extension] = str(subtitle_path)
+            if not segments:
+                segments = _parse_subtitle_segments(subtitle_path)
+
+    media_paths = {
+        media_path.stem.replace(f"{transcription_id}_", "", 1): str(media_path)
+        for media_path in settings.media_output_dir.glob(f"{transcription_id}_*")
+        if media_path.is_file()
+    }
+
+    return {
+        "id": transcription_id,
+        "filename": filename,
+        "result": {
+            "text": " ".join(segment["text"] for segment in segments),
+            "language": None,
+            "segments": segments,
+            "model_type": "whisper",
+        },
+        "created_at": datetime.fromtimestamp(source_path.stat().st_mtime).isoformat(),
+        "is_video": is_video,
+        "source_path": str(source_path),
+        "source_size": source_path.stat().st_size,
+        "subtitle_paths": subtitle_paths,
+        "media_paths": media_paths,
+        "translations": {},
+        "model_used": "Recovered from uploads",
+        "model_type": "whisper",
+        "time_taken": 0,
+    }
+
+
+def load_transcription_cache() -> None:
+    """Load persisted metadata, falling back to recovered upload files."""
+    transcription_cache.clear()
+
+    if TRANSCRIPTION_INDEX_PATH.exists():
+        try:
+            entries = json.loads(TRANSCRIPTION_INDEX_PATH.read_text(encoding="utf-8"))
+            for entry in entries:
+                if isinstance(entry, dict) and entry.get("id"):
+                    transcription_cache[entry["id"]] = entry
+        except (OSError, json.JSONDecodeError):
+            transcription_cache.clear()
+
+    recovered_any = False
+    for source_path in settings.source_media_dir.iterdir():
+        if not source_path.is_file():
+            continue
+        recovered = _recover_transcription_from_source(source_path)
+        if recovered and recovered["id"] not in transcription_cache:
+            transcription_cache[recovered["id"]] = recovered
+            recovered_any = True
+
+    if recovered_any or not TRANSCRIPTION_INDEX_PATH.exists():
+        persist_transcription_cache()
 
 
 def safe_remove_file(file_path: str, max_retries: int = 3, delay: float = 0.5) -> bool:
@@ -111,13 +252,15 @@ def safe_remove_file(file_path: str, max_retries: int = 3, delay: float = 0.5) -
             if attempt < max_retries - 1:
                 time.sleep(delay)
             else:
-                print(f"Warning: Could not remove file {path} after {max_retries} attempts")
+                print(
+                    f"Warning: Could not remove file {path} after {max_retries} attempts"
+                )
                 return False
 
     return False
 
 
-def load_whisper_model(model_size: Optional[str] = None):
+def load_whisper_model(model_size: Optional[str] = None) -> Any:
     """
     Load the Whisper model with caching
 
@@ -141,60 +284,7 @@ def load_whisper_model(model_size: Optional[str] = None):
     return model
 
 
-def load_qwen3_asr_model(model_name: Optional[str] = None):
-    """
-    Load Qwen3-ASR model with caching.
-    Requires: pip install qwen-asr
-
-    Args:
-        model_name: Name of the Qwen3-ASR model to load
-
-    Returns:
-        Loaded Qwen3-ASR model
-
-    Raises:
-        HTTPException: If model loading fails
-    """
-    from fastapi import HTTPException
-
-    model_name = model_name or settings.QWEN3_ASR_MODEL
-
-    # Normalize model name
-    if model_name in ["qwen3-asr-0.6b", "qwen3-asr-1.7b"]:
-        model_name = f"Qwen/Qwen3-ASR-{model_name.split('-')[-1].upper()}"
-
-    cache_key = model_name
-
-    if cache_key in QWEN3_ASR_CACHE:
-        return QWEN3_ASR_CACHE[cache_key]
-
-    try:
-        from qwen_asr import Qwen3ASRModel
-
-        model = Qwen3ASRModel.from_pretrained(
-            model_name,
-            dtype=torch.bfloat16 if DEVICE == "cuda" else torch.float32,
-            device_map="cuda:0" if DEVICE == "cuda" else "cpu",
-            max_inference_batch_size=32,
-            max_new_tokens=256,
-        )
-
-        QWEN3_ASR_CACHE[cache_key] = model
-        return model
-
-    except ImportError:
-        raise HTTPException(
-            status_code=500,
-            detail="Qwen3-ASR not installed. Install with: pip install qwen-asr"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to load Qwen3-ASR model: {str(e)}"
-        )
-
-
-def load_parakeet_model(model_name: Optional[str] = None):
+def load_parakeet_model(model_name: Optional[str] = None) -> Any:
     """
     Load Parakeet TDT model with caching.
     CPU-optimized using ONNX Runtime.
@@ -228,15 +318,14 @@ def load_parakeet_model(model_name: Optional[str] = None):
         PARAKEET_MODEL_CACHE[cache_key] = model
         return model
 
-    except ImportError as e:
+    except ImportError:
         raise HTTPException(
             status_code=500,
-            detail=f"Parakeet model not installed. Install with: pip install optimum[onnxruntime] transformers torch soundfile scipy"
+            detail="Parakeet model not installed. Install with: pip install optimum[onnxruntime] transformers torch soundfile scipy",
         )
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to load Parakeet model: {str(e)}"
+            status_code=500, detail=f"Failed to load Parakeet model: {str(e)}"
         )
 
 
@@ -258,16 +347,12 @@ def convert_to_wav(file_path: str) -> str:
     if not AudioSegment.converter:
         raise HTTPException(
             status_code=500,
-            detail="ffmpeg is not installed. Please install ffmpeg to process audio files."
+            detail="ffmpeg is not installed. Please install ffmpeg to process audio files.",
         )
 
     audio = AudioSegment.from_file(file_path)
     wav_path = file_path.replace(os.path.splitext(file_path)[1], ".wav")
-    audio.export(
-        wav_path,
-        format="wav",
-        parameters=["-ar", "16000", "-ac", "1"]
-    )
+    audio.export(wav_path, format="wav", parameters=["-ar", "16000", "-ac", "1"])
     return wav_path
 
 
@@ -275,7 +360,7 @@ def transcribe_with_whisper(
     file_path: str,
     language: Optional[str] = None,
     model_size: Optional[str] = None,
-    task: str = "transcribe"
+    task: str = "transcribe",
 ) -> TranscriptionResult:
     """
     Transcribe audio file using Whisper model
@@ -292,13 +377,7 @@ def transcribe_with_whisper(
     model = load_whisper_model(model_size)
     audio = whisper.load_audio(file_path)
 
-    result = whisper.transcribe(
-        model,
-        audio,
-        language=language,
-        task=task,
-        fp16=False
-    )
+    result = whisper.transcribe(model, audio, language=language, task=task, fp16=False)
 
     # Convert segments to Pydantic models
     segments = [
@@ -306,7 +385,7 @@ def transcribe_with_whisper(
             id=seg.get("id", i),
             start=seg.get("start", 0),
             end=seg.get("end", 0),
-            text=seg.get("text", "")
+            text=seg.get("text", ""),
         )
         for i, seg in enumerate(result.get("segments", []))
     ]
@@ -315,64 +394,12 @@ def transcribe_with_whisper(
         text=result["text"],
         language=result.get("language"),
         segments=segments,
-        model_type="whisper"
+        model_type="whisper",
     )
 
 
-def transcribe_with_qwen3_asr(
-    file_path: str,
-    language: Optional[str] = None,
-    model_name: Optional[str] = None
-) -> TranscriptionResult:
-    """
-    Transcribe audio file using Qwen3-ASR model.
-    Supports 30+ languages and 22 Chinese dialects.
-
-    Args:
-        file_path: Path to audio file
-        language: Language code for transcription
-        model_name: Qwen3-ASR model name to use
-
-    Returns:
-        TranscriptionResult with text, language, and segments
-    """
-    from fastapi import HTTPException
-
-    model = load_qwen3_asr_model(model_name)
-
-    try:
-        results = model.transcribe(
-            audio=file_path,
-            language=language,
-        )
-
-        if results and len(results) > 0:
-            result = results[0]
-            return TranscriptionResult(
-                text=result.text,
-                language=result.language,
-                segments=[],  # Qwen3-ASR doesn't return segments in basic mode
-                model_type="qwen3-asr"
-            )
-        else:
-            return TranscriptionResult(
-                text="",
-                language=language or "unknown",
-                segments=[],
-                model_type="qwen3-asr"
-            )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Qwen3-ASR transcription failed: {str(e)}"
-        )
-
-
 def transcribe_with_parakeet(
-    file_path: str,
-    language: Optional[str] = None,
-    model_name: Optional[str] = None
+    file_path: str, language: Optional[str] = None, model_name: Optional[str] = None
 ) -> TranscriptionResult:
     """
     Transcribe audio file using Parakeet TDT model.
@@ -393,11 +420,11 @@ def transcribe_with_parakeet(
         language=language,
         model_name=model_name,
         chunk_length=30.0,  # 30 second chunks
-        return_timestamps=True
+        return_timestamps=True,
     )
 
 
-def get_model_type(model: str) -> str:
+def get_model_type(model: str) -> ModelType:
     """
     Determine model type from model name
 
@@ -405,14 +432,18 @@ def get_model_type(model: str) -> str:
         model: Model name
 
     Returns:
-        Model type ('whisper', 'qwen3-asr', or 'parakeet')
+        Model type ('whisper' or 'parakeet')
     """
     if model in STT_MODELS:
         return STT_MODELS[model]["type"]
-    if model.startswith("whisper") or model in ["tiny", "base", "small", "medium", "large"]:
+    if model.startswith("whisper") or model in [
+        "tiny",
+        "base",
+        "small",
+        "medium",
+        "large",
+    ]:
         return "whisper"
-    if "qwen3" in model.lower() or "qwen" in model.lower():
-        return "qwen3-asr"
     if "parakeet" in model.lower():
         return "parakeet"
     return "whisper"
@@ -424,8 +455,8 @@ def get_available_models() -> list[STTModelInfo]:
         STTModelInfo(
             id=model_id,
             name=config["name"],
-            type=config["type"],  # type: ignore
-            description=config["description"]
+            type=config["type"],
+            description=config["description"],
         )
         for model_id, config in STT_MODELS.items()
     ]
@@ -436,7 +467,7 @@ def format_supported_extensions() -> str:
     return ", ".join(sorted(ALLOWED_EXTENSIONS))
 
 
-async def save_upload_file(file, destination: Path) -> int:
+async def save_upload_file(file: Any, destination: Path) -> int:
     """
     Stream an uploaded file to disk while enforcing the configured size limit.
 
@@ -465,7 +496,7 @@ async def save_upload_file(file, destination: Path) -> int:
                 max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
                 raise HTTPException(
                     status_code=413,
-                    detail=f"File too large. Maximum size is {max_mb:.0f} MB."
+                    detail=f"File too large. Maximum size is {max_mb:.0f} MB.",
                 )
 
             output.write(chunk)
@@ -496,28 +527,23 @@ def extract_audio_from_video(video_path: str) -> str:
 
     try:
         import moviepy.editor as mp
+
         video = mp.VideoFileClip(str(video_path))
         video.audio.write_audiofile(
-            audio_path,
-            codec='pcm_s16le',
-            verbose=False,
-            logger=None
+            audio_path, codec="pcm_s16le", verbose=False, logger=None
         )
         video.close()
         return audio_path
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error extracting audio: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error extracting audio: {str(e)}")
 
 
 async def process_transcription(
-    file,
+    file: Any,
     language: Optional[str] = None,
     model: Optional[str] = None,
-    task: str = "transcribe"
-) -> tuple:
+    task: str = "transcribe",
+) -> tuple[str, dict[str, Any], list[str]]:
     """
     Process a file for transcription
 
@@ -539,7 +565,7 @@ async def process_transcription(
     if file_extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file format. Supported formats: {format_supported_extensions()}"
+            detail=f"Invalid file format. Supported formats: {format_supported_extensions()}",
         )
 
     # Determine model and model type
@@ -547,10 +573,14 @@ async def process_transcription(
     model_type = get_model_type(model)
 
     if task not in {"transcribe", "translate"}:
-        raise HTTPException(status_code=400, detail="Task must be 'transcribe' or 'translate'")
+        raise HTTPException(
+            status_code=400, detail="Task must be 'transcribe' or 'translate'"
+        )
 
     if task == "translate" and model_type != "whisper":
-        raise HTTPException(status_code=400, detail="Translate task is only supported by Whisper models")
+        raise HTTPException(
+            status_code=400, detail="Translate task is only supported by Whisper models"
+        )
 
     # Validate model
     if model not in STT_MODELS and model_type == "whisper":
@@ -564,7 +594,7 @@ async def process_transcription(
 
     # Save uploaded file
     file_path = settings.source_media_dir / f"{transcription_id}_{safe_filename}"
-    files_to_cleanup = []
+    files_to_cleanup: list[str] = []
     saved_size = 0
 
     try:
@@ -583,7 +613,7 @@ async def process_transcription(
 
         # Convert source audio to WAV format for processing (16kHz mono).
         # Video extraction already writes a WAV audio track.
-        if not is_video and file_extension != '.wav':
+        if not is_video and file_extension != ".wav":
             wav_path = convert_to_wav(audio_path)
             if wav_path != audio_path:
                 files_to_cleanup.append(wav_path)
@@ -592,31 +622,20 @@ async def process_transcription(
         # Perform transcription
         start_time = datetime.now()
 
-        if model_type == "qwen3-asr":
-            result = transcribe_with_qwen3_asr(
-                audio_path,
-                language=language,
-                model_name=model
-            )
-        elif model_type == "parakeet":
+        if model_type == "parakeet":
             result = transcribe_with_parakeet(
-                audio_path,
-                language=language,
-                model_name=model
+                audio_path, language=language, model_name=model
             )
         else:
             result = transcribe_with_whisper(
-                audio_path,
-                language=language,
-                model_size=model,
-                task=task
+                audio_path, language=language, model_size=model, task=task
             )
 
         end_time = datetime.now()
         time_taken = (end_time - start_time).total_seconds()
 
         # Store result in cache
-        transcription_data = {
+        transcription_data: dict[str, Any] = {
             "id": transcription_id,
             "filename": safe_filename,
             "result": {
@@ -626,7 +645,7 @@ async def process_transcription(
                     {"id": s.id, "start": s.start, "end": s.end, "text": s.text}
                     for s in result.segments
                 ],
-                "model_type": result.model_type
+                "model_type": result.model_type,
             },
             "created_at": datetime.now().isoformat(),
             "is_video": is_video,
@@ -634,11 +653,13 @@ async def process_transcription(
             "source_size": saved_size,
             "subtitle_paths": {},
             "media_paths": {},
+            "translations": {},
             "model_used": model,
             "model_type": model_type,
-            "time_taken": round(time_taken, 2)
+            "time_taken": round(time_taken, 2),
         }
         transcription_cache[transcription_id] = transcription_data
+        persist_transcription_cache()
 
         return transcription_id, transcription_data, files_to_cleanup
 
@@ -652,7 +673,7 @@ async def process_transcription(
         for f in files_to_cleanup:
             safe_remove_file(f)
         safe_remove_file(str(file_path))
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing file: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
+load_transcription_cache()

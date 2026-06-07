@@ -4,6 +4,8 @@
 
 import {
   STTModelsResponse,
+  TranslationModelsResponse,
+  TranslationResult,
   TTSModelsResponse,
   TTSVoicesResponse,
   TranscriptionResponse,
@@ -11,20 +13,38 @@ import {
   TTSCacheEntry,
   HealthResponse,
   ApiError,
-} from '../types';
+} from "../types";
 
-const API_BASE = '/api/v1';
+const API_BASE = "/api/v1";
+const DEFAULT_TTS_MODEL = "Supertone/supertonic-3";
+const DEFAULT_TTS_VOICE = "M1";
 
 /**
  * Handle API response and throw error if not ok
  */
 async function handleResponse<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("Content-Type") || "";
+
   if (!response.ok) {
-    const error: ApiError = await response.json().catch(() => ({
-      detail: 'An unexpected error occurred',
-    }));
+    const error: ApiError = contentType.includes("application/json")
+      ? await response
+          .json()
+          .catch(() => ({ detail: "An unexpected error occurred" }))
+      : {
+          detail: await response
+            .text()
+            .catch(() => "An unexpected error occurred"),
+        };
     throw new Error(error.detail);
   }
+
+  if (!contentType.includes("application/json")) {
+    const preview = (await response.text()).slice(0, 80).trim();
+    throw new Error(
+      `Expected JSON response but received ${contentType || "unknown content type"}: ${preview}`,
+    );
+  }
+
   return response.json();
 }
 
@@ -32,7 +52,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
  * Health check endpoint
  */
 export async function getHealth(): Promise<HealthResponse> {
-  const response = await fetch('/health');
+  const response = await fetch("/health");
   return handleResponse<HealthResponse>(response);
 }
 
@@ -44,6 +64,11 @@ export async function getSTTModels(): Promise<STTModelsResponse> {
   return handleResponse<STTModelsResponse>(response);
 }
 
+export async function getTranslationModels(): Promise<TranslationModelsResponse> {
+  const response = await fetch(`${API_BASE}/translation/models`);
+  return handleResponse<TranslationModelsResponse>(response);
+}
+
 /**
  * Transcribe audio/video file
  */
@@ -52,24 +77,24 @@ export async function transcribeFile(
   options?: {
     language?: string;
     model?: string;
-    task?: 'transcribe' | 'translate';
-  }
+    task?: "transcribe" | "translate";
+  },
 ): Promise<TranscriptionResponse> {
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append("file", file);
 
   if (options?.language) {
-    formData.append('language', options.language);
+    formData.append("language", options.language);
   }
   if (options?.model) {
-    formData.append('model', options.model);
+    formData.append("model", options.model);
   }
   if (options?.task) {
-    formData.append('task', options.task);
+    formData.append("task", options.task);
   }
 
   const response = await fetch(`${API_BASE}/transcribe`, {
-    method: 'POST',
+    method: "POST",
     body: formData,
   });
 
@@ -80,20 +105,111 @@ export async function transcribeFile(
  * Get transcription by ID
  */
 export async function getTranscription(
-  transcriptionId: string
+  transcriptionId: string,
 ): Promise<TranscriptionInfo> {
   const response = await fetch(`${API_BASE}/transcription/${transcriptionId}`);
   return handleResponse<TranscriptionInfo>(response);
+}
+
+export function getTranscriptionSourceUrl(transcriptionId: string): string {
+  return `${API_BASE}/transcription/${transcriptionId}/source`;
+}
+
+export function getTranscriptionMediaUrl(
+  transcriptionId: string,
+  mediaKey: string,
+): string {
+  return `${API_BASE}/transcription/${transcriptionId}/media/${encodeURIComponent(mediaKey)}`;
+}
+
+export function getTranslationAudioUrl(
+  transcriptionId: string,
+  language: string,
+): string {
+  return `${API_BASE}/transcription/${transcriptionId}/translation/${encodeURIComponent(language)}/audio`;
+}
+
+export async function translateTranscription(
+  transcriptionId: string,
+  options: {
+    source_language?: string | null;
+    target_language: string;
+    model?: string;
+  },
+): Promise<{
+  success: boolean;
+  transcription_id: string;
+  translation: TranslationResult;
+}> {
+  const formData = new FormData();
+  if (options.source_language) {
+    formData.append("source_language", options.source_language);
+  }
+  formData.append("target_language", options.target_language);
+  if (options.model) {
+    formData.append("model", options.model);
+  }
+
+  const response = await fetch(
+    `${API_BASE}/transcription/${transcriptionId}/translate`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  return handleResponse<{
+    success: boolean;
+    transcription_id: string;
+    translation: TranslationResult;
+  }>(response);
+}
+
+export async function generateTranslatedTTS(
+  transcriptionId: string,
+  options: {
+    target_language: string;
+    tts_model?: string;
+    voice?: string;
+    speed?: number;
+    replace_existing?: boolean;
+  },
+): Promise<{
+  success: boolean;
+  transcription_id: string;
+  translation: TranslationResult;
+}> {
+  const formData = new FormData();
+  formData.append("target_language", options.target_language);
+  formData.append("tts_model", options.tts_model || DEFAULT_TTS_MODEL);
+  formData.append("voice", options.voice ?? DEFAULT_TTS_VOICE);
+  formData.append("speed", (options.speed ?? 1.0).toString());
+  formData.append(
+    "replace_existing",
+    String(options.replace_existing ?? false),
+  );
+
+  const response = await fetch(
+    `${API_BASE}/transcription/${transcriptionId}/translate/tts`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  return handleResponse<{
+    success: boolean;
+    transcription_id: string;
+    translation: TranslationResult;
+  }>(response);
 }
 
 /**
  * Delete transcription by ID
  */
 export async function deleteTranscription(
-  transcriptionId: string
+  transcriptionId: string,
 ): Promise<{ message: string; id: string }> {
   const response = await fetch(`${API_BASE}/transcription/${transcriptionId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
   return handleResponse<{ message: string; id: string }>(response);
 }
@@ -107,7 +223,7 @@ export async function listTranscriptions(): Promise<{
 }> {
   const response = await fetch(`${API_BASE}/list`);
   return handleResponse<{ transcriptions: TranscriptionInfo[]; total: number }>(
-    response
+    response,
   );
 }
 
@@ -116,47 +232,50 @@ export async function listTranscriptions(): Promise<{
  */
 export async function downloadSubtitle(
   transcriptionId: string,
-  format: 'srt' | 'vtt' = 'srt'
+  format: "srt" | "vtt" = "srt",
+  language: string = "original",
 ): Promise<{ content: string; filename: string; mediaType: string }> {
-  const params = new URLSearchParams({ format });
-  const response = await fetch(`${API_BASE}/subtitle/${transcriptionId}?${params}`);
+  const params = new URLSearchParams({ format, language });
+  const response = await fetch(
+    `${API_BASE}/subtitle/${transcriptionId}?${params}`,
+  );
 
   if (!response.ok) {
     const error: ApiError = await response.json().catch(() => ({
-      detail: 'Failed to download subtitle',
+      detail: "Failed to download subtitle",
     }));
     throw new Error(error.detail);
   }
 
   const content = await response.text();
-  const contentDisposition = response.headers.get('Content-Disposition');
+  const contentDisposition = response.headers.get("Content-Disposition");
   const filename = contentDisposition
-    ? contentDisposition.split('filename=')[1]?.replace(/"/g, '') ||
+    ? contentDisposition.split("filename=")[1]?.replace(/"/g, "") ||
       `subtitle.${format}`
     : `subtitle.${format}`;
-  const mediaType = response.headers.get('Content-Type') || 'text/plain';
+  const mediaType = response.headers.get("Content-Type") || "text/plain";
 
   return { content, filename, mediaType };
 }
 
 async function readFileDownload(
   response: Response,
-  defaultFilename: string
+  defaultFilename: string,
 ): Promise<{ blob: Blob; filename: string; mediaType: string }> {
   if (!response.ok) {
     const error: ApiError = await response.json().catch(() => ({
-      detail: 'File generation failed',
+      detail: "File generation failed",
     }));
     throw new Error(error.detail);
   }
 
   const blob = await response.blob();
-  const contentDisposition = response.headers.get('Content-Disposition');
+  const contentDisposition = response.headers.get("Content-Disposition");
   const filename = contentDisposition
-    ? contentDisposition.split('filename=')[1]?.replace(/"/g, '') ||
+    ? contentDisposition.split("filename=")[1]?.replace(/"/g, "") ||
       defaultFilename
     : defaultFilename;
-  const mediaType = response.headers.get('Content-Type') || blob.type;
+  const mediaType = response.headers.get("Content-Type") || blob.type;
 
   return { blob, filename, mediaType };
 }
@@ -167,20 +286,25 @@ async function readFileDownload(
 export async function embedSubtitleVideo(
   transcriptionId: string,
   options?: {
-    mode?: 'soft' | 'hard';
-    format?: 'srt' | 'vtt';
-  }
+    mode?: "soft" | "hard";
+    format?: "srt" | "vtt";
+    language?: string;
+  },
 ): Promise<{ blob: Blob; filename: string; mediaType: string }> {
   const formData = new FormData();
-  formData.append('mode', options?.mode || 'soft');
-  formData.append('format', options?.format || 'srt');
+  formData.append("mode", options?.mode || "soft");
+  formData.append("format", options?.format || "srt");
+  formData.append("language", options?.language || "original");
 
-  const response = await fetch(`${API_BASE}/subtitle/${transcriptionId}/embed`, {
-    method: 'POST',
-    body: formData,
-  });
+  const response = await fetch(
+    `${API_BASE}/subtitle/${transcriptionId}/embed`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
 
-  const defaultExt = options?.mode === 'hard' ? 'mp4' : 'mkv';
+  const defaultExt = options?.mode === "hard" ? "mp4" : "mkv";
   return readFileDownload(response, `subtitled-video.${defaultExt}`);
 }
 
@@ -190,6 +314,7 @@ export async function embedSubtitleVideo(
 export async function dubVideo(
   transcriptionId: string,
   options?: {
+    language?: string;
     target_language?: string;
     tts_model?: string;
     voice?: string;
@@ -197,25 +322,77 @@ export async function dubVideo(
     pitch?: number;
     original_volume?: number;
     whisper_model?: string;
-  }
+  },
 ): Promise<{ blob: Blob; filename: string; mediaType: string }> {
   const formData = new FormData();
-  if (options?.target_language) {
-    formData.append('target_language', options.target_language);
+  if (options?.language) {
+    formData.append("language", options.language);
   }
-  formData.append('tts_model', options?.tts_model || 'qwen3-tts-1.8b');
-  formData.append('voice', options?.voice || 'default');
-  formData.append('speed', (options?.speed ?? 1.0).toString());
-  formData.append('pitch', (options?.pitch ?? 1.0).toString());
-  formData.append('original_volume', (options?.original_volume ?? 0.15).toString());
-  formData.append('whisper_model', options?.whisper_model || 'whisper-base');
+  if (options?.target_language) {
+    formData.append("target_language", options.target_language);
+  }
+  formData.append("tts_model", options?.tts_model || DEFAULT_TTS_MODEL);
+  formData.append("voice", options?.voice ?? DEFAULT_TTS_VOICE);
+  formData.append("speed", (options?.speed ?? 1.0).toString());
+  formData.append("pitch", (options?.pitch ?? 1.0).toString());
+  formData.append(
+    "original_volume",
+    (options?.original_volume ?? 0.15).toString(),
+  );
+  formData.append("whisper_model", options?.whisper_model || "whisper-base");
 
   const response = await fetch(`${API_BASE}/dub/${transcriptionId}`, {
-    method: 'POST',
+    method: "POST",
     body: formData,
   });
 
-  return readFileDownload(response, 'dubbed-video.mp4');
+  return readFileDownload(response, "dubbed-video.mp4");
+}
+
+/**
+ * Generate one final video with both dubbing and subtitles.
+ */
+export async function dubAndSubtitleVideo(
+  transcriptionId: string,
+  options?: {
+    language?: string;
+    subtitle_mode?: "soft" | "hard";
+    subtitle_format?: "srt" | "vtt";
+    target_language?: string;
+    tts_model?: string;
+    voice?: string;
+    speed?: number;
+    pitch?: number;
+    original_volume?: number;
+    whisper_model?: string;
+  },
+): Promise<{ blob: Blob; filename: string; mediaType: string }> {
+  const formData = new FormData();
+  if (options?.language) {
+    formData.append("language", options.language);
+  }
+  formData.append("subtitle_mode", options?.subtitle_mode || "hard");
+  formData.append("subtitle_format", options?.subtitle_format || "srt");
+  if (options?.target_language) {
+    formData.append("target_language", options.target_language);
+  }
+  formData.append("tts_model", options?.tts_model || DEFAULT_TTS_MODEL);
+  formData.append("voice", options?.voice ?? DEFAULT_TTS_VOICE);
+  formData.append("speed", (options?.speed ?? 1.0).toString());
+  formData.append("pitch", (options?.pitch ?? 1.0).toString());
+  formData.append(
+    "original_volume",
+    (options?.original_volume ?? 0.15).toString(),
+  );
+  formData.append("whisper_model", options?.whisper_model || "whisper-base");
+
+  const response = await fetch(`${API_BASE}/dub/${transcriptionId}/subtitle`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const defaultExt = options?.subtitle_mode === "soft" ? "mkv" : "mp4";
+  return readFileDownload(response, `dubbed-subtitled-video.${defaultExt}`);
 }
 
 /**
@@ -245,36 +422,45 @@ export async function synthesizeSpeech(
     speed?: number;
     pitch?: number;
     language?: string | null;
-    output_format?: 'wav' | 'mp3';
-  }
-): Promise<{ audioBlob: Blob; ttsId: string; duration: number; sampleRate: number }> {
+    instruction?: string | null;
+    output_format?: "wav" | "mp3";
+  },
+): Promise<{
+  audioBlob: Blob;
+  ttsId: string;
+  duration: number;
+  sampleRate: number;
+}> {
   const formData = new FormData();
-  formData.append('text', text);
-  formData.append('model', options?.model || 'qwen3-tts-1.8b');
-  formData.append('voice', options?.voice || 'default');
-  formData.append('speed', (options?.speed ?? 1.0).toString());
-  formData.append('pitch', (options?.pitch ?? 1.0).toString());
+  formData.append("text", text);
+  formData.append("model", options?.model || DEFAULT_TTS_MODEL);
+  formData.append("voice", options?.voice ?? DEFAULT_TTS_VOICE);
+  formData.append("speed", (options?.speed ?? 1.0).toString());
+  formData.append("pitch", (options?.pitch ?? 1.0).toString());
   if (options?.language !== undefined) {
-    formData.append('language', options.language || '');
+    formData.append("language", options.language || "");
   }
-  formData.append('output_format', options?.output_format || 'wav');
+  if (options?.instruction !== undefined) {
+    formData.append("instruction", options.instruction || "");
+  }
+  formData.append("output_format", options?.output_format || "wav");
 
   const response = await fetch(`${API_BASE}/tts/synthesize`, {
-    method: 'POST',
+    method: "POST",
     body: formData,
   });
 
   if (!response.ok) {
     const error: ApiError = await response.json().catch(() => ({
-      detail: 'TTS synthesis failed',
+      detail: "TTS synthesis failed",
     }));
     throw new Error(error.detail);
   }
 
   const audioBlob = await response.blob();
-  const ttsId = response.headers.get('X-TTS-ID') || '';
-  const duration = parseFloat(response.headers.get('X-Duration') || '0');
-  const sampleRate = parseInt(response.headers.get('X-Sample-Rate') || '24000');
+  const ttsId = response.headers.get("X-TTS-ID") || "";
+  const duration = parseFloat(response.headers.get("X-Duration") || "0");
+  const sampleRate = parseInt(response.headers.get("X-Sample-Rate") || "24000");
 
   return { audioBlob, ttsId, duration, sampleRate };
 }
@@ -282,9 +468,7 @@ export async function synthesizeSpeech(
 /**
  * Get TTS result by ID
  */
-export async function getTTSResult(
-  ttsId: string
-): Promise<TTSCacheEntry> {
+export async function getTTSResult(ttsId: string): Promise<TTSCacheEntry> {
   const response = await fetch(`${API_BASE}/tts/result/${ttsId}`);
   return handleResponse<TTSCacheEntry>(response);
 }
@@ -293,10 +477,10 @@ export async function getTTSResult(
  * Delete TTS result by ID
  */
 export async function deleteTTSResult(
-  ttsId: string
+  ttsId: string,
 ): Promise<{ message: string; id: string }> {
   const response = await fetch(`${API_BASE}/tts/result/${ttsId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
   return handleResponse<{ message: string; id: string }>(response);
 }

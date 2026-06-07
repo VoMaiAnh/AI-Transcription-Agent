@@ -1,30 +1,30 @@
 /**
  * Transcription Page
  */
-import { useRef, useState } from 'react';
-import * as api from '../api/client';
-import { TranscriptionResponse } from '../types';
+import { useRef, useState } from "react";
+import * as api from "../api/client";
+import { TranscriptionResponse } from "../types";
 
 const ALLOWED_EXTENSIONS = [
-  '.mp3',
-  '.wav',
-  '.flac',
-  '.ogg',
-  '.m4a',
-  '.aac',
-  '.mp4',
-  '.mov',
-  '.mkv',
-  '.webm',
-  '.avi',
+  ".mp3",
+  ".wav",
+  ".flac",
+  ".ogg",
+  ".m4a",
+  ".aac",
+  ".mp4",
+  ".mov",
+  ".mkv",
+  ".webm",
+  ".avi",
 ];
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 export function TranscriptionPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [language, setLanguage] = useState('');
-  const [model, setModel] = useState('whisper-base');
-  const [task, setTask] = useState<'transcribe' | 'translate'>('transcribe');
+  const [language, setLanguage] = useState("");
+  const [model, setModel] = useState("whisper-base");
+  const [task, setTask] = useState<"transcribe" | "translate">("transcribe");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<TranscriptionResponse | null>(null);
@@ -36,14 +36,16 @@ export function TranscriptionPage() {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
-    const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
+    const ext = "." + selectedFile.name.split(".").pop()?.toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      setError(`Invalid file format. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`);
+      setError(
+        `Invalid file format. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}`,
+      );
       return;
     }
 
     if (selectedFile.size > MAX_FILE_SIZE) {
-      setError('File too large. Maximum size is 50MB.');
+      setError("File too large. Maximum size is 50MB.");
       return;
     }
 
@@ -54,7 +56,7 @@ export function TranscriptionPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
-      setError('Please select a file');
+      setError("Please select a file");
       return;
     }
 
@@ -77,7 +79,7 @@ export function TranscriptionPage() {
       setProgress(100);
       setResult(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Transcription failed');
+      setError(err instanceof Error ? err.message : "Transcription failed");
     } finally {
       clearInterval(progressInterval);
       setLoading(false);
@@ -86,7 +88,7 @@ export function TranscriptionPage() {
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
@@ -103,48 +105,61 @@ export function TranscriptionPage() {
 
   const handleDownloadTxt = () => {
     if (!result?.text) return;
-    downloadBlob(new Blob([result.text], { type: 'text/plain' }), `transcription_${Date.now()}.txt`);
+    downloadBlob(
+      new Blob([result.text], { type: "text/plain" }),
+      `transcription_${Date.now()}.txt`,
+    );
   };
 
-  const handleDownloadSubtitle = async (format: 'srt' | 'vtt') => {
+  const handleDownloadSubtitle = async (format: "srt" | "vtt") => {
     if (!result?.transcription_id) return;
     try {
       const { content, filename, mediaType } = await api.downloadSubtitle(
         result.transcription_id,
-        format
+        format,
       );
       downloadBlob(new Blob([content], { type: mediaType }), filename);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download subtitle');
+      setError(
+        err instanceof Error ? err.message : "Failed to download subtitle",
+      );
     }
   };
 
   const handleReset = () => {
     setFile(null);
-    setLanguage('');
+    setLanguage("");
     setResult(null);
     setError(null);
     setProgress(0);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const wordCount = result?.text ? result.text.trim().split(/\s+/).filter((w) => w).length : 0;
+  const wordCount = result?.text
+    ? result.text
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w).length
+    : 0;
 
   return (
     <div className="page">
       <div className="page-header">
         <h1>Audio/Video Transcription</h1>
-        <p>Convert audio and video files to text using AI-powered speech recognition</p>
+        <p>
+          Convert audio and video files to text using AI-powered speech
+          recognition
+        </p>
       </div>
 
       <div className="card">
@@ -155,7 +170,7 @@ export function TranscriptionPage() {
               ref={fileInputRef}
               type="file"
               id="file"
-              accept={ALLOWED_EXTENSIONS.join(',')}
+              accept={ALLOWED_EXTENSIONS.join(",")}
               onChange={handleFileChange}
               disabled={loading}
             />
@@ -170,9 +185,14 @@ export function TranscriptionPage() {
           {loading && (
             <div className="progress-container">
               <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${progress}%` }} />
+                <div
+                  className="progress-fill"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
-              <p className="progress-text">Processing... {Math.round(progress)}%</p>
+              <p className="progress-text">
+                Processing... {Math.round(progress)}%
+              </p>
             </div>
           )}
 
@@ -216,12 +236,10 @@ export function TranscriptionPage() {
                   <option value="whisper-medium">Medium</option>
                   <option value="whisper-large">Large (Best)</option>
                 </optgroup>
-                <optgroup label="Qwen3-ASR Models">
-                  <option value="qwen3-asr-0.6b">Qwen3-ASR 0.6B</option>
-                  <option value="qwen3-asr-1.7b">Qwen3-ASR 1.7B</option>
-                </optgroup>
                 <optgroup label="Subtitle Models">
-                  <option value="parakeet-tdt-0.6b">Parakeet TDT 0.6B v3</option>
+                  <option value="parakeet-tdt-0.6b">
+                    Parakeet TDT 0.6B v3
+                  </option>
                 </optgroup>
               </select>
             </div>
@@ -231,7 +249,9 @@ export function TranscriptionPage() {
               <select
                 id="task"
                 value={task}
-                onChange={(e) => setTask(e.target.value as 'transcribe' | 'translate')}
+                onChange={(e) =>
+                  setTask(e.target.value as "transcribe" | "translate")
+                }
                 disabled={loading}
               >
                 <option value="transcribe">Transcribe</option>
@@ -243,11 +263,19 @@ export function TranscriptionPage() {
           {error && <div className="alert alert-error">{error}</div>}
 
           <div className="form-actions">
-            <button type="submit" className="btn btn-primary" disabled={loading || !file}>
-              {loading ? 'Processing...' : 'Transcribe'}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading || !file}
+            >
+              {loading ? "Processing..." : "Transcribe"}
             </button>
             {result && (
-              <button type="button" className="btn btn-secondary" onClick={handleReset}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleReset}
+              >
                 Clear
               </button>
             )}
@@ -259,8 +287,10 @@ export function TranscriptionPage() {
             <div className="result-header">
               <h3>Result</h3>
               <div className="result-meta">
-                <span className="badge">{result.language || 'Auto'}</span>
-                <span className="badge badge-secondary">{result.model_used}</span>
+                <span className="badge">{result.language || "Auto"}</span>
+                <span className="badge badge-secondary">
+                  {result.model_used}
+                </span>
               </div>
             </div>
 
@@ -279,16 +309,25 @@ export function TranscriptionPage() {
 
             {result.segments && result.segments.length > 0 && (
               <div className="result-actions">
-                <button className="btn btn-outline" onClick={handleCopyToClipboard}>
+                <button
+                  className="btn btn-outline"
+                  onClick={handleCopyToClipboard}
+                >
                   Copy Text
                 </button>
                 <button className="btn btn-outline" onClick={handleDownloadTxt}>
                   Download TXT
                 </button>
-                <button className="btn btn-outline" onClick={() => handleDownloadSubtitle('srt')}>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => handleDownloadSubtitle("srt")}
+                >
                   Download SRT
                 </button>
-                <button className="btn btn-outline" onClick={() => handleDownloadSubtitle('vtt')}>
+                <button
+                  className="btn btn-outline"
+                  onClick={() => handleDownloadSubtitle("vtt")}
+                >
                   Download VTT
                 </button>
               </div>

@@ -1,29 +1,28 @@
 ﻿# AI Transcription & TTS Agent
 
-An AI-powered audio/video transcription and text-to-speech application using Whisper, Qwen3-ASR, and Qwen3-TTS models. This tool converts audio and video files into accurate text transcriptions and can also synthesize speech from text.
+An AI-powered audio/video transcription and text-to-speech application using Whisper, Parakeet TDT, and Supertonic 3. This tool converts audio and video files into accurate text transcriptions and can synthesize on-device preset voices from text.
 <img width="1908" height="906" alt="Captura de pantalla 2026-03-03 232938" src="https://github.com/user-attachments/assets/f9f842a5-097c-40cc-95ad-856908daa4c9" />
 
 ## Features
 
 ### Speech-to-Text (STT)
 - **High-accuracy speech-to-text transcription** using OpenAI Whisper
-- **Qwen3-ASR models** with support for 30+ languages and 22 Chinese dialects
+- **Parakeet TDT** for precise timestamped subtitle workflows
 - **Multiple model options** from fast (tiny) to high-accuracy (large)
 - **Video file support** with automatic audio extraction
 - **Subtitle generation** in SRT and VTT formats
 
 ### Text-to-Speech (TTS)
-- **Qwen3-TTS models** for natural-sounding speech synthesis
-- **CosyVoice models** for high-quality voice generation
-- **Voice selection** with multiple options
-- **Speed and pitch control** for customized output
+- **Supertonic 3** for ONNX Runtime on-device multilingual speech synthesis
+- **Built-in voice styles** M1-M5 and F1-F5 across 31 supported language codes
+- **Speed control** for customized output
 
 ### Web Interface
 - **Modern React frontend** with Vite for fast development
 - **Responsive design** that works on all devices
 - **Real-time progress** indicators
 - **History management** for transcriptions and TTS results
-  
+
 ### 🖥️ App Screenshots
 
 <details>
@@ -88,7 +87,7 @@ AI-Transcription-Agent/
 
 Before running this project, ensure you have:
 
-- **Python 3.10+** (including Python 3.12+)
+- **Python 3.10+**
 - **FFmpeg** (Required for audio processing)
 - **Git** (For cloning the repository)
 - **Node.js 18+** (For frontend development)
@@ -185,10 +184,10 @@ Create a `.env` file in the project root:
 STT_MODEL=base
 DEVICE=cpu
 WHISPER_MODEL=base
-QWEN3_ASR_MODEL=Qwen/Qwen3-ASR-1.7B
+PARAKEET_MODEL=nvidia/parakeet-tdt-0.6b-v3
 
 # TTS Model Configuration
-TTS_MODEL=qwen3-tts-1.8b
+TTS_MODEL=Supertone/supertonic-3
 
 # Application settings
 MAX_FILE_SIZE=52428800
@@ -273,7 +272,10 @@ curl -X POST http://localhost:8000/api/v1/transcribe \
 ```bash
 curl -X POST http://localhost:8000/api/v1/tts/synthesize \
   -F "text=Hello, this is a test." \
-  -F "model=qwen3-tts-1.8b" \
+  -F "model=Supertone/supertonic-3" \
+  -F "voice=M1" \
+  -F "language=en" \
+  -F "speed=1.0" \
   -o output.wav
 ```
 
@@ -403,6 +405,7 @@ Look for the folder starting with `Gyan.FFmpeg` and navigate to the `bin` subfol
 ## Key Dependencies
 
 - **openai-whisper** - OpenAI's Whisper model for speech recognition
+- **supertonic** - ONNX Runtime on-device multilingual text-to-speech
 - **pydub** - Audio manipulation and processing
 - **pydantic-settings** - Configuration management
 - **FFmpeg** - Backend for audio/video processing
@@ -426,8 +429,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Acknowledgments
 
 - [OpenAI Whisper](https://github.com/openai/whisper) for the powerful transcription model
-- [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) for multilingual ASR [github](https://github.com/QwenLM/Qwen3-ASR)
-- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) for text-to-speech [github](https://github.com/QwenLM/Qwen3-TTS)
+- [Supertonic 3](https://github.com/supertone-inc/supertonic) for on-device multilingual TTS
 - [pydub](https://github.com/jiaaro/pydub) for audio processing capabilities
 - [FFmpeg](https://ffmpeg.org/) for multimedia framework
 
@@ -435,4 +437,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 If you encounter any issues or have questions:
 1. Check the [Troubleshooting](#troubleshooting) section
-2. Open an [issue](https://github.com/VoMaiAnh/AI-Transcription-Agent/issues) on GitHub [github](https://github.com/QwenLM/Qwen3-ASR)
+2. Open an [issue](https://github.com/VoMaiAnh/AI-Transcription-Agent/issues) on GitHub
