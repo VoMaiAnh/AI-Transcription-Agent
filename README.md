@@ -1,4 +1,6 @@
-﻿# AI Transcription & TTS Agent
+﻿# SYNCRA - AI Media Studio 
+
+<img width="1672" height="941" alt="Logo2_long" src="https://github.com/user-attachments/assets/c04827c7-e05f-445b-861c-cc97a81400b1" />
 
 An AI-powered audio/video transcription and text-to-speech application using Whisper, Parakeet TDT, and Supertonic 3. This tool converts audio and video files into accurate text transcriptions and can synthesize on-device preset voices from text.
 <img width="1908" height="906" alt="Captura de pantalla 2026-03-03 232938" src="https://github.com/user-attachments/assets/f9f842a5-097c-40cc-95ad-856908daa4c9" />
@@ -26,18 +28,29 @@ An AI-powered audio/video transcription and text-to-speech application using Whi
 ### 🖥️ App Screenshots
 
 <details>
-  <summary>View Transcription Tab</summary>
-  <img src="https://github.com/user-attachments/assets/939e94cf-5a22-4fdb-822b-59ae56518074">
+  <summary>View Project Dashboard</summary>
+  <img width="955" height="468" alt="Captura de pantalla 2026-06-07 104000" src="https://github.com/user-attachments/assets/db53367a-fc9b-4ce8-9d63-b68f169691b4" />
 </details>
 
 <details>
-  <summary>View TTS Tab</summary>
-  <img src="https://github.com/user-attachments/assets/15d54856-d612-4ca8-8a6d-44eee56ff993">
+  <summary>View Live Editor Tab</summary>
+  <img width="951" height="467" alt="Captura de pantalla 2026-06-07 104319" src="https://github.com/user-attachments/assets/1f697836-433b-4f11-b5ed-8de4535e51ea" />
 </details>
 
 <details>
-  <summary>View History Tab</summary>
-  <img src="https://github.com/user-attachments/assets/c8ba049a-555f-44ce-ba88-92c15eba9d2e">
+  <summary>View Dubbing Studio Tab</summary>
+  <img width="947" height="463" alt="Captura de pantalla 2026-06-07 103856" src="https://github.com/user-attachments/assets/dc884a54-42ca-4fb0-ac8d-7c6840d56357" />
+  <img width="949" height="464" alt="Captura de pantalla 2026-06-07 103943" src="https://github.com/user-attachments/assets/b54e45de-d21d-47c9-8eec-c926d6863b8d" />
+</details>
+
+<details>
+  <summary>View Archive & History Tab</summary>
+  <img width="952" height="471" alt="Captura de pantalla 2026-06-07 104336" src="https://github.com/user-attachments/assets/409cc46e-672e-4d6a-82dc-9f0555e98a29" />
+</details>
+
+<details>
+  <summary>View AI Tools Status Tab</summary>
+  <img width="953" height="467" alt="Captura de pantalla 2026-06-07 104347" src="https://github.com/user-attachments/assets/c07ee7a3-e227-492a-b721-6877b86a5617" />
 </details>
 
 ## Project Structure
