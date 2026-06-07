@@ -1,0 +1,1 @@
+{"Pacific Blue":"3AAEBC","Cyan Glow":"52F7F9","Pacific Cyan":"008A9E","Electric Aqua":"83E8EC","Pacific Blue 2":"00BDD1"}

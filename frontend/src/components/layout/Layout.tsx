@@ -9,7 +9,7 @@ const navItems = [
   { to: "/status", label: "AI Status", icon: "AI" },
 ];
 
-const syncraLogo = "/Logo/V1/Logo_without_BG.png";
+const syncraLogo = "/Logo/V2/Logo2_without_BG.png";
 const sidebarStorageKey = "syncra-sidebar-collapsed";
 
 function PlusIcon() {

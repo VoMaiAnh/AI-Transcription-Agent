@@ -41,6 +41,33 @@ const SUPERTONIC_VOICES = [
 
 type RenderAction = "soft" | "hard" | "dub" | "combined-soft" | "combined-hard";
 
+function LibraryToggleIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      className="library-toggle-icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {collapsed ? <path d="M9 6l6 6-6 6" /> : <path d="M15 6l-6 6 6 6" />}
+    </svg>
+  );
+}
+
+function ProjectLibraryIcon() {
+  return (
+    <svg
+      className="library-rail-icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M5 7.5h14M5 12h14M5 16.5h10" />
+      <path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+    </svg>
+  );
+}
+
 function chooseRenderedMediaKey(
   mediaPaths?: Record<string, string>,
 ): string | null {
@@ -83,7 +110,7 @@ export function DubbingStudioPage() {
   const [ttsModel, setTtsModel] = useState(SUPERTONIC_MODEL.id);
   const [speed, setSpeed] = useState(1);
   const [originalVolume, setOriginalVolume] = useState(0.15);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [libraryExpanded, setLibraryExpanded] = useState(true);
   const [enableSubtitles, setEnableSubtitles] = useState(true);
   const [enableDubbing, setEnableDubbing] = useState(true);
   const [replaceOriginalAudio, setReplaceOriginalAudio] = useState(false);
@@ -412,24 +439,41 @@ export function DubbingStudioPage() {
 
   return (
     <div
-      className={`studio-grid dubbing-grid ${sidebarOpen ? "" : "sidebar-collapsed"}`}
+      className={`studio-grid dubbing-grid ${libraryExpanded ? "" : "library-collapsed"}`}
     >
-      <button
-        className="studio-button ghost sidebar-toggle"
-        type="button"
-        onClick={() => setSidebarOpen((current) => !current)}
-      >
-        {sidebarOpen ? "Hide Library" : "Show Library"}
-      </button>
-
       <aside
-        className={`glass-card voice-library ${sidebarOpen ? "" : "hidden"}`}
+        className={`glass-card voice-library ${libraryExpanded ? "" : "collapsed"}`}
       >
-        <h2>Project Library</h2>
-        <div className="model-note">
-          <strong>{projects.length} saved jobs</strong>
-          <span>Open transcription work created in Live Editor.</span>
+        <div className="library-header">
+          <span className="library-rail-badge" aria-hidden="true">
+            <ProjectLibraryIcon />
+          </span>
+          <div className="library-heading">
+            <h2>Project Library</h2>
+            <span>{projects.length} saved jobs</span>
+          </div>
+          <button
+            type="button"
+            className="library-collapse-button"
+            onClick={() => setLibraryExpanded((current) => !current)}
+            aria-label={
+              libraryExpanded
+                ? "Narrow project library"
+                : "Expand project library"
+            }
+            title={
+              libraryExpanded
+                ? "Narrow project library"
+                : "Expand project library"
+            }
+          >
+            <LibraryToggleIcon collapsed={!libraryExpanded} />
+          </button>
         </div>
+        <span className="library-rail-label" aria-hidden="true">
+          Projects
+        </span>
+
         {projects.length === 0 ? (
           <div className="empty-panel small">
             <span>No saved transcriptions yet.</span>
@@ -445,11 +489,13 @@ export function DubbingStudioPage() {
                 className={`library-project-button ${project?.id === item.id ? "active" : ""}`}
                 type="button"
                 onClick={() => loadProject(item.id)}
+                title={item.filename}
               >
-                <span className="media-thumb small">
+                <span className="media-thumb small library-media-badge">
                   {item.is_video ? "AV" : "AU"}
                 </span>
-                <span>
+                <span className="library-project-dot" aria-hidden="true" />
+                <span className="library-project-copy">
                   <strong>{item.filename}</strong>
                   <small>
                     {item.result.language || "Auto"} -{" "}
@@ -460,24 +506,6 @@ export function DubbingStudioPage() {
             ))}
           </div>
         )}
-
-        <div className="model-note">
-          <strong>Supertonic 3</strong>
-          <span>Built-in voice styles for fast on-device dubbing.</span>
-        </div>
-        <div className="voice-list-compact">
-          {SUPERTONIC_VOICES.map((item) => (
-            <button
-              key={item.id}
-              className={`voice-card ${voice === item.id ? "active" : ""}`}
-              type="button"
-              onClick={() => setVoice(item.id)}
-            >
-              <span className="avatar-token">{item.id}</span>
-              <span>{item.name}</span>
-            </button>
-          ))}
-        </div>
       </aside>
 
       <section className="stage-column">
@@ -495,31 +523,6 @@ export function DubbingStudioPage() {
 
           {project ? (
             <>
-              <div className="workflow-mode-row">
-                <label
-                  className={`mode-toggle ${enableSubtitles ? "active" : ""}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={enableSubtitles}
-                    onChange={(event) =>
-                      setEnableSubtitles(event.target.checked)
-                    }
-                  />
-                  <span>Add subtitles</span>
-                </label>
-                <label
-                  className={`mode-toggle ${enableDubbing ? "active" : ""}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={enableDubbing}
-                    onChange={(event) => setEnableDubbing(event.target.checked)}
-                  />
-                  <span>Add dubbings</span>
-                </label>
-              </div>
-
               <div className="studio-preview-grid">
                 <div className="media-preview-frame">
                   <div className="preview-label">
@@ -564,23 +567,6 @@ export function DubbingStudioPage() {
                         controls
                         preload="metadata"
                       />
-                      <div className="button-row wrap">
-                        <button
-                          className="studio-button ghost small"
-                          type="button"
-                          onClick={handleRenderedDownload}
-                        >
-                          Download Final Result
-                        </button>
-                        <button
-                          className="studio-button ghost small"
-                          type="button"
-                          onClick={handleRedoRender}
-                          disabled={!lastRenderAction || mediaLoading !== null}
-                        >
-                          Redo Render
-                        </button>
-                      </div>
                     </>
                   ) : (
                     <div className="empty-panel small">
@@ -588,6 +574,73 @@ export function DubbingStudioPage() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div className="workflow-mode-row">
+                <label
+                  className={`mode-toggle ${enableSubtitles ? "active" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enableSubtitles}
+                    onChange={(event) =>
+                      setEnableSubtitles(event.target.checked)
+                    }
+                  />
+                  <span className="mode-toggle-copy">
+                    <strong>Add subtitles</strong>
+                    <small>
+                      Export caption tracks or render them into video
+                    </small>
+                  </span>
+                </label>
+                <label
+                  className={`mode-toggle ${enableDubbing ? "active" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enableDubbing}
+                    onChange={(event) => setEnableDubbing(event.target.checked)}
+                  />
+                  <span className="mode-toggle-copy">
+                    <strong>Add dubbing</strong>
+                    <small>
+                      Mix or replace the original audio with the dub
+                    </small>
+                  </span>
+                </label>
+              </div>
+
+              <div className="rendered-action-strip">
+                <div>
+                  <strong>
+                    {renderedUrl ? "Rendered result ready" : "No render yet"}
+                  </strong>
+                  <span>
+                    {renderedUrl
+                      ? renderedLabel
+                      : "Choose subtitles, dubbing, or both, then render from Export & Deliver."}
+                  </span>
+                </div>
+                {renderedUrl && (
+                  <div className="button-row wrap">
+                    <button
+                      className="studio-button ghost small"
+                      type="button"
+                      onClick={handleRenderedDownload}
+                    >
+                      Download Final Result
+                    </button>
+                    <button
+                      className="studio-button ghost small"
+                      type="button"
+                      onClick={handleRedoRender}
+                      disabled={!lastRenderAction || mediaLoading !== null}
+                    >
+                      Redo Render
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="project-meta-strip">
@@ -802,25 +855,6 @@ export function DubbingStudioPage() {
                 ))}
               </select>
             </label>
-          )}
-          {renderedUrl && (
-            <div className="button-row wrap">
-              <button
-                className="studio-button ghost"
-                type="button"
-                onClick={handleRenderedDownload}
-              >
-                Download Final Result
-              </button>
-              <button
-                className="studio-button ghost"
-                type="button"
-                onClick={handleRedoRender}
-                disabled={!lastRenderAction || mediaLoading !== null}
-              >
-                Redo Render
-              </button>
-            </div>
           )}
           {enableSubtitles && (
             <>
