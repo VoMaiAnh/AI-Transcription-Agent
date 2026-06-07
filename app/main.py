@@ -76,8 +76,15 @@ def create_app() -> FastAPI:
     # Mount static files for frontend (in production)
     frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
     frontend_assets = frontend_dist / "assets"
+
+    # 1. Mount the CSS/JS compiled assets
     if frontend_assets.exists():
         app.mount("/assets", StaticFiles(directory=str(frontend_assets)), name="assets")
+
+    # 2. FIX: Mount the Logo (and other public folders) explicitly without breaking root routing
+    logo_dir = frontend_dist / "Logo"
+    if logo_dir.exists():
+        app.mount("/Logo", StaticFiles(directory=str(logo_dir)), name="logos")
 
     @app.get("/", response_class=HTMLResponse, response_model=None)
     async def root(request: Request) -> HTMLResponse | dict[str, str]:
